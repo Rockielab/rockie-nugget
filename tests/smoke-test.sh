@@ -31,11 +31,11 @@ echo "${DIM}  scratch HOME: $WORK${RESET}"
 # Sandbox every well-known dir into the scratch HOME.
 export HOME="$WORK"
 export NUGGET_BIN_DIR="$WORK/.local/bin"
-export GOOSE_CONFIG_DIR="$WORK/.config/goose"
+export XDG_CONFIG_HOME="$WORK/.config"
 export NUGGET_WORKSPACE="$WORK/ws"
 
 BIN="$NUGGET_BIN_DIR"
-CONFIG="$GOOSE_CONFIG_DIR/config.yaml"
+CONFIG="$XDG_CONFIG_HOME/goose/config.yaml"
 
 # On a non-Linux host the platform gate fires by design; assert that and stop.
 if [ "$(uname -s)" != "Linux" ]; then
@@ -72,6 +72,7 @@ grep -q "research-env-v1:" "$CONFIG"            && ok "config registers research
 grep -q "enabled: true"    "$CONFIG"            && ok "extension has enabled: true (required by Goose)" || bad "missing enabled: true"
 grep -q "$REPO/mcp/research-env-mcp/server.py" "$CONFIG" && ok "config points at this checkout's MCP server" || bad "MCP server path wrong"
 
+grep -q "XDG_CONFIG_HOME" "$BIN/nugget"         && ok "launcher pins XDG_CONFIG_HOME (Goose's config var)" || bad "launcher missing XDG_CONFIG_HOME"
 grep -q "GOOSE_PROVIDER" "$BIN/nugget"          && ok "launcher maps BYOK → GOOSE_PROVIDER"          || bad "launcher missing provider map"
 grep -q "OPENAI_API_KEY" "$BIN/nugget"          && ok "launcher reads OPENAI_API_KEY (BYOK)"         || bad "launcher missing OPENAI_API_KEY"
 grep -q "ANTHROPIC_API_KEY" "$BIN/nugget"       && ok "launcher reads ANTHROPIC_API_KEY (BYOK)"      || bad "launcher missing ANTHROPIC_API_KEY"

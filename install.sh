@@ -26,7 +26,11 @@ GOOSE_REPO="Rockielab/rockie-nugget"
 
 # ── install locations (well-known dirs only) ────────────────────────────────
 BIN_DIR="${NUGGET_BIN_DIR:-$HOME/.local/bin}"
-GOOSE_CONFIG_DIR="${GOOSE_CONFIG_DIR:-$HOME/.config/goose}"
+# Goose reads its config from $XDG_CONFIG_HOME/goose (default ~/.config/goose).
+# We derive from XDG_CONFIG_HOME so the launcher and Goose always agree, and so
+# `XDG_CONFIG_HOME=/some/dir ./install.sh` actually redirects Goose.
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+GOOSE_CONFIG_DIR="$XDG_CONFIG_HOME/goose"
 WORKSPACE_DIR="${NUGGET_WORKSPACE:-$HOME/.local/share/nugget/workspace}"
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd -P)"
@@ -158,6 +162,8 @@ cat > "$NUGGET" <<NUGGET_EOF
 set -euo pipefail
 
 GOOSE="$GOOSE_BIN"
+# Pin Goose at the config this install wrote (Goose reads \$XDG_CONFIG_HOME/goose).
+export XDG_CONFIG_HOME="\${XDG_CONFIG_HOME:-$XDG_CONFIG_HOME}"
 
 case "\${1:-}" in
   run)

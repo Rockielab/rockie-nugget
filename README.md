@@ -97,6 +97,10 @@ reason like *Rockie*. It is config-only — the same files the local installer c
   The agent emits `[LEARN]` / `[DEAD-END]` blocks; a `Stop` hook
   ([`overlay/hooks/capture.sh`](./overlay/hooks/)) appends them to plain-text memory the next
   session recalls. No database — plain files, deliberately.
+- **`overlay/ATTRIBUTION.yaml`** — the public attribution manifest for this
+  config-only overlay and the upstream community skill credits it references.
+  Nugget does not ship direct `SKILL.md` mirrors, so this manifest is the
+  portable credit surface.
 
 The overlay names no model identity or provider SKU: it is fully model-agnostic, so it works
 identically whether you run BYOK locally or against the served model on the platform.

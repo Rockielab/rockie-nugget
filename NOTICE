@@ -2,6 +2,9 @@ rockie-nugget
 Copyright 2026 Pebble ML
 
 This product includes software developed at Pebble ML (https://rockielab.com).
+Public attribution metadata for the config-only Rockie overlay, including
+upstream community skill credit summaries, is maintained in
+overlay/ATTRIBUTION.yaml.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

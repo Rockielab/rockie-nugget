@@ -1,0 +1,192 @@
+schema_version: 1
+surface: "rockie-nugget-overlay"
+description: >-
+  Public attribution manifest for the Rockie nugget overlay. The nugget overlay
+  is config-only and does not mirror platform skill SKILL.md files. Community
+  skill credit therefore stays readable here as an explicit manifest instead of
+  synthetic skill mirrors.
+
+attribution:
+  schema_version: 1
+  authors:
+    - rockie_username: "rockie-maintainers"
+      display_name: "Rockie Maintainers"
+      profile_refs: ["github:Rockielab"]
+  maintainers:
+    - rockie_username: "rockie-maintainers"
+      display_name: "Rockie Maintainers"
+      profile_refs: ["github:Rockielab"]
+  profiles:
+    github:Rockielab:
+      provider: "github"
+      url: "https://github.com/Rockielab"
+      verified: false
+  source:
+    repo: "Rockielab/rockie-nugget"
+    path: "overlay/ATTRIBUTION.yaml"
+    version: "2026-06-20"
+    url: "https://github.com/Rockielab/rockie-nugget/tree/main/overlay"
+  contact_policy:
+    maintainer_contact: "profile_public_only"
+    contribution_channel: "product_proposals"
+  completeness: "complete"
+
+upstream_skill_attributions:
+  source_manifest:
+    repo: "Rockielab/platform-skills"
+    path: "skills/*/SKILL.md"
+    url: "https://github.com/Rockielab/platform-skills/tree/main/skills"
+  note: >-
+    These entries summarize community skill attribution from platform-skills for
+    readers of this open harness. Nugget does not ship direct SKILL.md mirrors.
+  skills:
+    - name: "build-agent"
+      attribution:
+        schema_version: 1
+        authors:
+          - rockie_username: "theo-ramirez"
+            display_name: "Theo Ramirez"
+            profile_refs: ["platform-skills:theo-ramirez"]
+        maintainers:
+          - rockie_username: "theo-ramirez"
+            display_name: "Theo Ramirez"
+            profile_refs: ["platform-skills:theo-ramirez"]
+        profiles:
+          platform-skills:theo-ramirez:
+            provider: "platform-skills"
+            url: "https://github.com/Rockielab/platform-skills/tree/main/skills/build-agent"
+            verified: false
+        source:
+          repo: "Rockielab/platform-skills"
+          path: "skills/build-agent/SKILL.md"
+          version: "2026-04-17"
+          url: "https://github.com/Rockielab/platform-skills/tree/main/skills/build-agent"
+        contact_policy:
+          maintainer_contact: "profile_public_only"
+          contribution_channel: "product_proposals"
+        completeness: "complete"
+    - name: "diligence-deck"
+      attribution:
+        schema_version: 1
+        authors:
+          - rockie_username: "lena-ortiz"
+            display_name: "Lena Ortiz"
+            profile_refs: ["platform-skills:lena-ortiz"]
+        maintainers:
+          - rockie_username: "lena-ortiz"
+            display_name: "Lena Ortiz"
+            profile_refs: ["platform-skills:lena-ortiz"]
+        profiles:
+          platform-skills:lena-ortiz:
+            provider: "platform-skills"
+            url: "https://github.com/Rockielab/platform-skills/tree/main/skills/diligence-deck"
+            verified: false
+        source:
+          repo: "Rockielab/platform-skills"
+          path: "skills/diligence-deck/SKILL.md"
+          version: "2026-04-09"
+          url: "https://github.com/Rockielab/platform-skills/tree/main/skills/diligence-deck"
+        contact_policy:
+          maintainer_contact: "profile_public_only"
+          contribution_channel: "product_proposals"
+        completeness: "complete"
+    - name: "excel"
+      attribution:
+        schema_version: 1
+        authors:
+          - rockie_username: "priya-nair"
+            display_name: "Priya Nair"
+            profile_refs: ["platform-skills:priya-nair"]
+        maintainers:
+          - rockie_username: "priya-nair"
+            display_name: "Priya Nair"
+            profile_refs: ["platform-skills:priya-nair"]
+        profiles:
+          platform-skills:priya-nair:
+            provider: "platform-skills"
+            url: "https://github.com/Rockielab/platform-skills/tree/main/skills/excel"
+            verified: false
+        source:
+          repo: "Rockielab/platform-skills"
+          path: "skills/excel/SKILL.md"
+          version: "2026-03-18"
+          url: "https://github.com/Rockielab/platform-skills/tree/main/skills/excel"
+        contact_policy:
+          maintainer_contact: "profile_public_only"
+          contribution_channel: "product_proposals"
+        completeness: "complete"
+    - name: "physics"
+      attribution:
+        schema_version: 1
+        authors:
+          - rockie_username: "nikhil-rao"
+            display_name: "Nikhil Rao"
+            profile_refs: ["platform-skills:nikhil-rao"]
+        maintainers:
+          - rockie_username: "nikhil-rao"
+            display_name: "Nikhil Rao"
+            profile_refs: ["platform-skills:nikhil-rao"]
+        profiles:
+          platform-skills:nikhil-rao:
+            provider: "platform-skills"
+            url: "https://github.com/Rockielab/platform-skills/tree/main/skills/physics"
+            verified: false
+        source:
+          repo: "Rockielab/platform-skills"
+          path: "skills/physics/SKILL.md"
+          version: "2026-05-28"
+          url: "https://github.com/Rockielab/platform-skills/tree/main/skills/physics"
+        contact_policy:
+          maintainer_contact: "profile_public_only"
+          contribution_channel: "product_proposals"
+        completeness: "complete"
+    - name: "powerpoint"
+      attribution:
+        schema_version: 1
+        authors:
+          - rockie_username: "elias-ward"
+            display_name: "Elias Ward"
+            profile_refs: ["platform-skills:elias-ward"]
+        maintainers:
+          - rockie_username: "elias-ward"
+            display_name: "Elias Ward"
+            profile_refs: ["platform-skills:elias-ward"]
+        profiles:
+          platform-skills:elias-ward:
+            provider: "platform-skills"
+            url: "https://github.com/Rockielab/platform-skills/tree/main/skills/powerpoint"
+            verified: false
+        source:
+          repo: "Rockielab/platform-skills"
+          path: "skills/powerpoint/SKILL.md"
+          version: "2026-03-22"
+          url: "https://github.com/Rockielab/platform-skills/tree/main/skills/powerpoint"
+        contact_policy:
+          maintainer_contact: "profile_public_only"
+          contribution_channel: "product_proposals"
+        completeness: "complete"
+    - name: "upstream-contribute"
+      attribution:
+        schema_version: 1
+        authors:
+          - rockie_username: "amara-singh"
+            display_name: "Amara Singh"
+            profile_refs: ["platform-skills:amara-singh"]
+        maintainers:
+          - rockie_username: "amara-singh"
+            display_name: "Amara Singh"
+            profile_refs: ["platform-skills:amara-singh"]
+        profiles:
+          platform-skills:amara-singh:
+            provider: "platform-skills"
+            url: "https://github.com/Rockielab/platform-skills/tree/main/skills/upstream-contribute"
+            verified: false
+        source:
+          repo: "Rockielab/platform-skills"
+          path: "skills/upstream-contribute/SKILL.md"
+          version: "2026-05-14"
+          url: "https://github.com/Rockielab/platform-skills/tree/main/skills/upstream-contribute"
+        contact_policy:
+          maintainer_contact: "profile_public_only"
+          contribution_channel: "product_proposals"
+        completeness: "complete"

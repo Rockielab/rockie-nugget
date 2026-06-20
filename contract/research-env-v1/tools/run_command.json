@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "run_command",
-  "description": "Run a shell command in the workspace sandbox. Returns combined stdout+stderr and the exit code. CPU-only; GPU work goes through submit_job.",
+  "description": "Run a shell command in the workspace sandbox. Returns the FULL stdout, then a labeled [stderr] block, then [exit <code>] — faithfully, even for non-UTF-8/binary output (decoded with replacement, never dropped). Output over ~1MB per stream is truncated with an explicit [... TRUNCATED ...] marker (never silently). CPU-only; GPU work goes through submit_job.",
   "inputSchema": {
     "type": "object",
     "properties": {

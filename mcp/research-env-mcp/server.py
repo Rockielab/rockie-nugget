@@ -124,17 +124,60 @@ def t_write_file(args):
     return f"wrote {args['path']} ({len(content.encode('utf-8'))} bytes)"
 
 
+# Generous, EXPLICIT per-stream output cap. Big enough for normal eval output;
+# when hit, the result says so loudly (no silent truncation — see #qc-2026-06-20).
+RUN_COMMAND_MAX_STREAM_BYTES = 1_000_000
+
+
+def _decode_stream(raw: bytes) -> tuple[str, bool]:
+    """Faithfully decode a captured stream to text, never raising.
+
+    Decodes as UTF-8 with errors="replace" so non-UTF-8 / binary bytes (common
+    from a crashing native program) become U+FFFD rather than discarding the
+    ENTIRE stream via an uncaught UnicodeDecodeError. Applies the explicit byte
+    cap and reports it. Returns (text, truncated)."""
+    truncated = len(raw) > RUN_COMMAND_MAX_STREAM_BYTES
+    if truncated:
+        raw = raw[:RUN_COMMAND_MAX_STREAM_BYTES]
+    return raw.decode("utf-8", errors="replace"), truncated
+
+
 def t_run_command(args):
     WORKSPACE.mkdir(parents=True, exist_ok=True)
     timeout = int(args.get("timeout_sec", 120))
+    # capture_output WITHOUT text= so we get raw bytes and decode ourselves —
+    # text=True would raise UnicodeDecodeError on any non-UTF-8 byte and the
+    # generic handler would then drop ALL stdout/stderr + the exit code.
     try:
         r = subprocess.run(
             args["command"], shell=True, cwd=str(WORKSPACE),
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, timeout=timeout,
         )
-    except subprocess.TimeoutExpired:
-        raise ToolError("tool_error", f"command timed out after {timeout}s")
-    return f"{r.stdout}{r.stderr}\n[exit {r.returncode}]"
+    except subprocess.TimeoutExpired as e:
+        # Surface whatever the command produced before the timeout — a partial
+        # result is far more useful than just "timed out".
+        partial = []
+        for label, raw in (("stdout", e.stdout), ("stderr", e.stderr)):
+            if raw:
+                txt, trunc = _decode_stream(raw)
+                partial.append(f"[partial {label}{' — TRUNCATED' if trunc else ''}]\n{txt}")
+        joined = ("\n" + "\n".join(partial)) if partial else ""
+        raise ToolError("tool_error", f"command timed out after {timeout}s{joined}")
+
+    out, out_trunc = _decode_stream(r.stdout or b"")
+    err, err_trunc = _decode_stream(r.stderr or b"")
+    parts = []
+    if out:
+        parts.append(out if out.endswith("\n") else out + "\n")
+    if out_trunc:
+        parts.append(f"[stdout TRUNCATED at {RUN_COMMAND_MAX_STREAM_BYTES} bytes]\n")
+    if err:
+        parts.append("[stderr]\n")
+        parts.append(err if err.endswith("\n") else err + "\n")
+    if err_trunc:
+        parts.append(f"[stderr TRUNCATED at {RUN_COMMAND_MAX_STREAM_BYTES} bytes]\n")
+    parts.append(f"[exit {r.returncode}]")
+    return "".join(parts)
 
 
 def _det(seed: str) -> str:

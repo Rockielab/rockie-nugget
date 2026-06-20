@@ -134,10 +134,9 @@ if [ -d "$OVERLAY_SRC" ]; then
   # recipes + hooks: authoritative copies from the checkout (safe to overwrite).
   mkdir -p "$RECIPES_DST" "$HOOK_PLUGIN_DST/hooks" "$MEMORY_DST"
   [ -d "$OVERLAY_SRC/recipes" ] && cp -a "$OVERLAY_SRC/recipes/." "$RECIPES_DST/"
+  # Goose reads the Open-Plugins manifest at <plugin>/hooks/hooks.json (verified
+  # against goose 1.38). The overlay ships it there, so a plain copy is correct.
   [ -d "$OVERLAY_SRC/hooks" ]   && cp -a "$OVERLAY_SRC/hooks/."   "$HOOK_PLUGIN_DST/hooks/"
-  # hooks.json belongs at the plugin root, not under hooks/.
-  cp -a "$OVERLAY_SRC/hooks/hooks.json" "$HOOK_PLUGIN_DST/hooks.json" 2>/dev/null || true
-  rm -f "$HOOK_PLUGIN_DST/hooks/hooks.json" 2>/dev/null || true
   chmod +x "$HOOK_PLUGIN_DST"/hooks/*.sh 2>/dev/null || true
   # Pin the memory dir the hook writes to (so it matches Goose's memory ext).
   export NUGGET_OVERLAY_DIR="$HOOK_PLUGIN_DST"

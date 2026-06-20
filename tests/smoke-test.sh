@@ -85,7 +85,7 @@ grep -q "rockie-nugget overlay (managed" "$HINTS" && ok ".goosehints uses a mana
 have "$RECIPES/autoresearch.yaml"  "recipe: autoresearch.yaml installed"
 have "$RECIPES/experiment.yaml"    "recipe: experiment.yaml installed"
 have "$RECIPES/clean.yaml"         "recipe: clean.yaml installed"
-have "$PLUGIN/hooks.json"          "capture hook plugin registered (Open-Plugins)"
+have "$PLUGIN/hooks/hooks.json"    "capture hook plugin registered (Open-Plugins manifest at hooks/hooks.json)"
 have "$PLUGIN/hooks/capture.sh"    "capture hook script installed"
 [ -x "$PLUGIN/hooks/capture.sh" ] && ok "capture hook is executable" || bad "capture hook not executable"
 have "$MEMORY/learning.txt"        "memory scaffold: learning.txt seeded"

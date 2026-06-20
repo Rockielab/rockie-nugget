@@ -79,7 +79,10 @@ grep -q "ANTHROPIC_API_KEY" "$BIN/nugget"       && ok "launcher reads ANTHROPIC_
 
 # login stub must be present and value-free (masking boundary).
 "$BIN/nugget" login 2>&1 | grep -qi "coming soon" && ok "nugget login is a labeled 'coming soon' stub" || bad "login stub missing/mislabeled"
-if "$BIN/nugget" login 2>&1 | grep -qiE 'base_url|provider name|stone|served-model-key'; then
+# Masking boundary: the login stub must not name the served model. The generic
+# BYOK placeholder (OPENAI_BASE_URL=api.your-provider.com) is fine; what must
+# NEVER appear is a real served-model endpoint/identity.
+if "$BIN/nugget" login 2>&1 | grep -qiE 'stone|rockielab\.com/v1|served-model-key|GOOSE_PROVIDER=[a-z]'; then
   bad "login stub leaks served-model values (masking violation)"
 else
   ok "login stub leaks no served-model values"

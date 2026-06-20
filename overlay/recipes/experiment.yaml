@@ -28,14 +28,6 @@ parameters:
     default: "600"
     description: Job timeout in seconds.
 
-extensions:
-  - type: stdio
-    name: research-env-v1
-
-settings:
-  goose_provider: "{{ '${GOOSE_PROVIDER}' }}"
-  goose_model: "{{ '${GOOSE_MODEL}' }}"
-
 instructions: |
   Run a single compute experiment via the Rockie backend. Use only
   research-env-v1 tools. Do NOT run GPU or training work on the local host.

@@ -14,14 +14,6 @@ parameters:
     default: "staged"
     description: '"staged" (git diff --cached) or "dirty" (all modified + untracked).'
 
-extensions:
-  - type: stdio
-    name: research-env-v1
-
-settings:
-  goose_provider: "{{ '${GOOSE_PROVIDER}' }}"
-  goose_model: "{{ '${GOOSE_MODEL}' }}"
-
 instructions: |
   Audit the {{ scope }} change set for slop before commit. Use research-env-v1
   tools. Audit ONLY changed files — existing slop elsewhere is not this commit's

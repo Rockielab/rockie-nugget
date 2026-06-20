@@ -13,32 +13,73 @@
 # Goose memory category-file format is plain entries separated by a blank line;
 # the first line is the entry, a leading `# tag` line attaches retrieval tags.
 #
-# Fail-open: any error exits 0 so a broken hook never blocks the session. The
-# hook reads the Open-Plugins hook payload (JSON on stdin) for transcript_path,
-# and falls back to GOOSE_TRANSCRIPT_PATH / the first argument.
+# Fail-open: any error exits 0 so a broken hook never blocks the session.
+#
+# Goose's Open-Plugins Stop payload (JSON on stdin) carries `session_id`, not a
+# transcript path — the session lives in Goose's session store. We recover the
+# turn text with `goose session export --format json`. For portability the hook
+# also accepts a `transcript_path` (Claude-Code/Codex shape) or a file argument.
 set +e
 
 MEM_DIR="${GOOSE_MEMORY_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/goose/memory}"
 mkdir -p "$MEM_DIR" 2>/dev/null
 
 INPUT="$(cat 2>/dev/null)"
+SESSION_ID="$(printf '%s' "$INPUT" | python3 -c 'import sys,json
+try: print(json.load(sys.stdin).get("session_id","") or "")
+except Exception: print("")' 2>/dev/null)"
 TRANSCRIPT="$(printf '%s' "$INPUT" | python3 -c 'import sys,json
-try: print(json.load(sys.stdin).get("transcript_path",""))
+try: print(json.load(sys.stdin).get("transcript_path","") or "")
 except Exception: print("")' 2>/dev/null)"
 [ -z "$TRANSCRIPT" ] && TRANSCRIPT="${GOOSE_TRANSCRIPT_PATH:-${1:-}}"
-[ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ] && { echo "[capture] no transcript; nothing to do" >&2; exit 0; }
 
-python3 - "$TRANSCRIPT" "$MEM_DIR" <<'PY'
+# Resolve the session text into $SRC (a temp file the python reads).
+GOOSE_BIN="${GOOSE_BIN:-$(command -v goose 2>/dev/null)}"
+SRC=""
+if [ -n "$SESSION_ID" ] && [ -n "$GOOSE_BIN" ]; then
+  SRC="$(mktemp 2>/dev/null)"
+  if ! "$GOOSE_BIN" session export --session-id "$SESSION_ID" --format json >"$SRC" 2>/dev/null || [ ! -s "$SRC" ]; then
+    rm -f "$SRC" 2>/dev/null; SRC=""
+  fi
+fi
+if [ -z "$SRC" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  SRC="$TRANSCRIPT"
+fi
+[ -z "$SRC" ] && { echo "[capture] no session text available (session_id=$SESSION_ID); nothing to do" >&2; exit 0; }
+
+python3 - "$SRC" "$MEM_DIR" <<'PY'
 import sys, re, json, pathlib
 
 transcript_path, mem_dir = sys.argv[1], sys.argv[2]
 file_text = pathlib.Path(transcript_path).read_text(errors="ignore")
 
-# Transcript may be JSONL (one entry per line, assistant text as an escaped
-# string) or plain text. Prefer JSON parsing so escaped "\n" become real
-# newlines (the block anchors rely on real blank lines); fall back to the raw
-# bytes if the file isn't JSONL. We only keep assistant-authored text.
+# Source may be (a) a Goose `session export --format json` document — a dict with
+# a `conversation` list of {role, content}; (b) JSONL — one {type, message} per
+# line (Claude/Codex shape); or (c) plain text. Prefer structured parsing so
+# escaped "\n" become real newlines (the block anchors rely on real blank
+# lines); fall back to raw bytes otherwise. We only keep assistant-authored text.
+def content_text(content):
+    if isinstance(content, str):
+        return content
+    out = []
+    for b in (content or []):
+        if isinstance(b, dict) and b.get("type") == "text":
+            out.append(b.get("text", ""))
+    return "\n".join(out)
+
 def assistant_text(file_text):
+    # (a) whole-file JSON document with a conversation array.
+    try:
+        doc = json.loads(file_text)
+    except Exception:
+        doc = None
+    if isinstance(doc, dict):
+        msgs = doc.get("conversation") or doc.get("messages") or []
+        chunks = [content_text(m.get("content"))
+                  for m in msgs
+                  if isinstance(m, dict) and m.get("role") == "assistant"]
+        return ("\n\n".join(c for c in chunks if c), True)
+    # (b) JSONL, one entry per line.
     chunks, any_json = [], False
     for line in file_text.splitlines():
         line = line.strip()
@@ -49,16 +90,13 @@ def assistant_text(file_text):
         except Exception:
             continue
         any_json = True
-        if not isinstance(entry, dict) or entry.get("type") != "assistant":
+        if not isinstance(entry, dict):
             continue
-        content = entry.get("message", {}).get("content", [])
-        if isinstance(content, str):
-            chunks.append(content)
-        else:
-            for b in (content or []):
-                if isinstance(b, dict) and b.get("type") == "text":
-                    chunks.append(b.get("text", ""))
-    return ("\n\n".join(chunks), any_json)
+        if entry.get("type") == "assistant":
+            chunks.append(content_text(entry.get("message", {}).get("content")))
+        elif entry.get("role") == "assistant":
+            chunks.append(content_text(entry.get("content")))
+    return ("\n\n".join(c for c in chunks if c), any_json)
 
 text, was_json = assistant_text(file_text)
 raw = text if was_json else file_text

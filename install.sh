@@ -219,6 +219,9 @@ set -euo pipefail
 GOOSE="$GOOSE_BIN"
 # Pin Goose at the config this install wrote (Goose reads \$XDG_CONFIG_HOME/goose).
 export XDG_CONFIG_HOME="\${XDG_CONFIG_HOME:-$XDG_CONFIG_HOME}"
+# Let the Stop capture hook find Goose for \`session export\` (PATH may be bare
+# inside the hook subprocess).
+export GOOSE_BIN="\${GOOSE_BIN:-$GOOSE_BIN}"
 
 case "\${1:-}" in
   run)
@@ -268,7 +271,10 @@ else
   exit 2
 fi
 
-exec "\$GOOSE" run --no-session -t "\$*"
+# Run inside a named session (not --no-session) so the Stop capture hook can
+# `goose session export` the turn to persist [LEARN]/[DEAD-END] memory. Override
+# the session name with NUGGET_SESSION if you want a stable resumable handle.
+exec "\$GOOSE" run --name "\${NUGGET_SESSION:-nugget-\$(date +%Y%m%d-%H%M%S)}" -t "\$*"
 NUGGET_EOF
 chmod +x "$NUGGET"
 say "[+] installed nugget launcher → $NUGGET"

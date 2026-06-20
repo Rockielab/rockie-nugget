@@ -15,23 +15,35 @@ Side-effect policy:
         read_file, list_files, write_file, run_command
   - REAL Rockie backend (device-auth via rockie_auth; $ROCKIELAB_API_URL):
         submit_job, get_job
-  - Deterministic STUBS (no network / no backend) — wired in a later slice:
-        web_search, fetch_url
+  - REAL web (stdlib urllib, NO backend dependency, keyless by default so it
+    works for free/local/BYOK users out of the box):
+        web_search  — DuckDuckGo HTML by default; a BYO SEARCH_API_KEY provider
+                      (tavily/brave/serper) overrides it for higher quality.
+        fetch_url   — plain HTTP(S) GET → readable text, SSRF-guarded (blocks
+                      private/loopback/link-local/metadata ranges on every hop)
+                      because the same tool runs on platform tenant machines.
   - finish: terminal tool, echoes the result.
 
 Result-string format (contract README § Result-string format):
   - success: raw text, or pretty-printed JSON (2-space) for structured tools
   - error:   {"error":{"code":<stable_string>,"message":<prose>}}  as a text block
 
-Wiring web_search/fetch_url to the real backend is a LATER slice (C) — see
-a3c-mcp.md. submit_job/get_job are wired here (Slice B) against the same
-device-flow + jobs API the shipped @rockielab/cli uses.
+submit_job/get_job are wired (Slice B) against the same device-flow + jobs API
+the shipped @rockielab/cli uses. web_search/fetch_url run directly from this
+server (no Rockie backend), keeping local ≡ platform: the identical tool code
+executes in both places.
 """
-import hashlib
+import html
+import ipaddress
 import json
 import os
+import re
+import socket
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 import rockie_auth
@@ -180,32 +192,224 @@ def t_run_command(args):
     return "".join(parts)
 
 
-def _det(seed: str) -> str:
-    return hashlib.sha256(seed.encode()).hexdigest()[:8]
+# ---------------------------------------------------------------------------
+# Web tools (stdlib only). web_search is keyless by default (DuckDuckGo HTML),
+# fetch_url is SSRF-guarded. The same code runs locally and on tenant machines.
+# ---------------------------------------------------------------------------
+# Pretend to be a normal browser; DDG's HTML endpoint 403s an empty UA.
+_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+       "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+HTTP_TIMEOUT_SEC = int(os.environ.get("WEB_TOOL_TIMEOUT_SEC", "20"))
+FETCH_MAX_BYTES = int(os.environ.get("FETCH_URL_MAX_BYTES", str(2_000_000)))
+FETCH_MAX_REDIRECTS = 5
+
+
+def _http_get(url: str, *, headers=None) -> tuple[bytes, str, str]:
+    """GET a URL with NO redirect following. Returns (body, final_url, content_type)."""
+    req = urllib.request.Request(url, headers={"User-Agent": _UA, **(headers or {})})
+    opener = urllib.request.build_opener(_NoRedirect())
+    try:
+        resp = opener.open(req, timeout=HTTP_TIMEOUT_SEC)
+    except urllib.error.HTTPError as e:
+        # 3xx surfaces here because redirects are disabled — let the caller decide.
+        if e.code in (301, 302, 303, 307, 308):
+            return b"", e.headers.get("Location", ""), str(e.code)
+        raise ToolError("tool_error", f"HTTP {e.code} for {url}")
+    except urllib.error.URLError as e:
+        raise ToolError("tool_error", f"could not fetch {url}: {e.reason}")
+    body = resp.read(FETCH_MAX_BYTES + 1)
+    return body, resp.geturl(), resp.headers.get("Content-Type", "")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None  # raise the 3xx as an HTTPError instead of auto-following
+
+
+# --- SSRF guard -----------------------------------------------------------
+def _assert_public_url(url: str) -> None:
+    """Reject non-http(s) schemes and any host that resolves to a private,
+    loopback, link-local, or cloud-metadata address. Called on EVERY redirect hop."""
+    parts = urllib.parse.urlparse(url)
+    if parts.scheme not in ("http", "https"):
+        raise ToolError("tool_error", f"refused non-http(s) scheme: {parts.scheme!r}")
+    host = parts.hostname
+    if not host:
+        raise ToolError("tool_error", f"no host in url: {url!r}")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ToolError("tool_error", f"could not resolve host {host!r}: {e}")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            raise ToolError(
+                "tool_error",
+                f"refused fetch to non-public address {ip} (host {host!r})",
+            )
+
+
+# --- HTML → text ----------------------------------------------------------
+_TAG_DROP = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.S | re.I)
+_TAG_ANY = re.compile(r"<[^>]+>")
+_WS = re.compile(r"[ \t]*\n[ \t]*(?:\n[ \t]*)+")
+
+
+def _html_to_text(raw: str) -> str:
+    txt = _TAG_DROP.sub(" ", raw)
+    txt = re.sub(r"<br\s*/?>", "\n", txt, flags=re.I)
+    txt = re.sub(r"</(p|div|li|h[1-6]|tr)>", "\n", txt, flags=re.I)
+    txt = _TAG_ANY.sub("", txt)
+    txt = html.unescape(txt)
+    txt = "\n".join(line.strip() for line in txt.splitlines())
+    return _WS.sub("\n\n", txt).strip()
+
+
+# --- web_search -----------------------------------------------------------
+# DDG's lite HTML serves <a class="result-link">title</a> + a result-snippet div.
+_DDG_RESULT = re.compile(
+    r'<a[^>]+class="result-link"[^>]+href="(?P<url>[^"]+)"[^>]*>(?P<title>.*?)</a>'
+    r'.*?<td[^>]+class="result-snippet"[^>]*>(?P<snip>.*?)</td>',
+    re.S | re.I,
+)
+# The html.duckduckgo.com layout: <a class="result__a" href=...>title</a> + result__snippet
+_DDG_RESULT_HTML = re.compile(
+    r'<a[^>]+class="result__a"[^>]+href="(?P<url>[^"]+)"[^>]*>(?P<title>.*?)</a>'
+    r'.*?class="result__snippet"[^>]*>(?P<snip>.*?)</(?:a|div)>',
+    re.S | re.I,
+)
+
+
+def _strip(s: str) -> str:
+    return _html_to_text(s).replace("\n", " ").strip()
+
+
+def _ddg_unwrap(href: str) -> str:
+    """DDG wraps result URLs as /l/?uddg=<encoded>; unwrap to the real target."""
+    if href.startswith("//"):
+        href = "https:" + href
+    p = urllib.parse.urlparse(href)
+    if "duckduckgo.com" in (p.netloc or "") and p.path.startswith("/l/"):
+        qs = urllib.parse.parse_qs(p.query)
+        if "uddg" in qs:
+            return qs["uddg"][0]
+    return href
+
+
+def _search_duckduckgo(query: str, k: int) -> list:
+    data = urllib.parse.urlencode({"q": query}).encode()
+    body, _, _ = _http_get_post("https://html.duckduckgo.com/html/", data)
+    page = body.decode("utf-8", errors="replace")
+    out = []
+    for m in _DDG_RESULT_HTML.finditer(page):
+        out.append({
+            "title": _strip(m.group("title")),
+            "url": _ddg_unwrap(m.group("url")),
+            "snippet": _strip(m.group("snip")),
+        })
+        if len(out) >= k:
+            break
+    if not out and ("anomaly" in page.lower() or "blocked" in page.lower()):
+        raise ToolError("rate_limited",
+                        "DuckDuckGo blocked this request (rate limit); set a "
+                        "BYO SEARCH_API_KEY provider for reliable search.")
+    return out
+
+
+def _http_get_post(url: str, data: bytes) -> tuple[bytes, str, str]:
+    req = urllib.request.Request(
+        url, data=data,
+        headers={"User-Agent": _UA,
+                 "Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SEC)
+    except urllib.error.HTTPError as e:
+        raise ToolError("tool_error", f"search HTTP {e.code}")
+    except urllib.error.URLError as e:
+        raise ToolError("tool_error", f"search request failed: {e.reason}")
+    return resp.read(), resp.geturl(), resp.headers.get("Content-Type", "")
+
+
+def _search_byo(query: str, k: int, key: str, provider: str) -> list:
+    """Higher-quality search via a BYO key. Generic, small provider switch."""
+    provider = provider.lower()
+    if provider == "tavily":
+        body = json.dumps({"api_key": key, "query": query, "max_results": k}).encode()
+        req = urllib.request.Request(
+            "https://api.tavily.com/search", data=body,
+            headers={"Content-Type": "application/json"})
+        results_key, mapper = "results", (
+            lambda r: {"title": r.get("title", ""), "url": r.get("url", ""),
+                       "snippet": r.get("content", "")})
+    elif provider == "brave":
+        url = "https://api.search.brave.com/res/v1/web/search?" + \
+            urllib.parse.urlencode({"q": query, "count": k})
+        req = urllib.request.Request(
+            url, headers={"X-Subscription-Token": key, "Accept": "application/json"})
+        results_key, mapper = None, None  # parsed below (nested shape)
+    elif provider == "serper":
+        body = json.dumps({"q": query, "num": k}).encode()
+        req = urllib.request.Request(
+            "https://google.serper.dev/search", data=body,
+            headers={"X-API-KEY": key, "Content-Type": "application/json"})
+        results_key, mapper = "organic", (
+            lambda r: {"title": r.get("title", ""), "url": r.get("link", ""),
+                       "snippet": r.get("snippet", "")})
+    else:
+        raise ToolError("tool_error", f"unknown SEARCH_PROVIDER: {provider!r}")
+
+    try:
+        resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SEC)
+        payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as e:
+        raise ToolError("tool_error", f"{provider} search HTTP {e.code}")
+    except urllib.error.URLError as e:
+        raise ToolError("tool_error", f"{provider} search failed: {e.reason}")
+
+    if provider == "brave":
+        items = (payload.get("web", {}) or {}).get("results", []) or []
+        return [{"title": r.get("title", ""), "url": r.get("url", ""),
+                 "snippet": r.get("description", "")} for r in items[:k]]
+    return [mapper(r) for r in (payload.get(results_key, []) or [])[:k]]
 
 
 def t_web_search(args):
-    q = args["query"]
-    k = int(args.get("k", 10))
-    h = _det(q)
-    results = [
-        {
-            "title": f"[STUB] Result {i+1} for {q!r}",
-            "url": f"https://stub.research-env.local/{h}/{i+1}",
-            "snippet": f"Deterministic stub snippet {i+1} for query {q!r}. "
-                       "Wire to the real Rockie backend in a later slice.",
-        }
-        for i in range(min(k, 3))
-    ]
+    query = args["query"]
+    k = max(1, min(int(args.get("k", 10)), 25))
+    key = os.environ.get("SEARCH_API_KEY", "").strip()
+    if key:
+        provider = os.environ.get("SEARCH_PROVIDER", "tavily").strip() or "tavily"
+        results = _search_byo(query, k, key, provider)
+    else:
+        results = _search_duckduckgo(query, k)
+    if not results:
+        return json.dumps({"query": query, "results": [],
+                           "note": "no results"}, indent=2)
     return json.dumps(results, indent=2)
 
 
 def t_fetch_url(args):
     url = args["url"]
-    return (
-        f"[STUB] Extracted main-content text for {url}\n"
-        f"(deterministic id {_det(url)}). Wire to the real fetch backend later."
-    )
+    for _ in range(FETCH_MAX_REDIRECTS + 1):
+        _assert_public_url(url)  # re-checked on every hop (SSRF defense)
+        body, final_url, ctype = _http_get(url)
+        if ctype in ("301", "302", "303", "307", "308"):
+            if not final_url:
+                raise ToolError("tool_error", "redirect with no Location header")
+            url = urllib.parse.urljoin(url, final_url)
+            continue
+        truncated = len(body) > FETCH_MAX_BYTES
+        body = body[:FETCH_MAX_BYTES]
+        text = body.decode("utf-8", errors="replace")
+        if "html" in ctype.lower() or text.lstrip()[:1] == "<":
+            text = _html_to_text(text)
+        if truncated:
+            text += (f"\n\n[truncated at {FETCH_MAX_BYTES} bytes "
+                     "(FETCH_URL_MAX_BYTES)]")
+        return text or "(empty response body)"
+    raise ToolError("tool_error", f"too many redirects (>{FETCH_MAX_REDIRECTS})")
 
 
 def _require_token():

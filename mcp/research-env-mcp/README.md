@@ -13,18 +13,33 @@ Add/rename a tool in the contract → it shows up here on next start, no code ch
 - Contract dir: `RESEARCH_ENV_CONTRACT_DIR` (default: the `contract/research-env-v1/` dir at the repo root, resolved relative to this server file)
 - Workspace sandbox: `RESEARCH_ENV_WORKSPACE` (default `./workspace`)
 
-## Stub policy
+## Side-effect policy
 
 | Tool | Behavior |
 |---|---|
 | `read_file`, `list_files`, `write_file`, `run_command` | **REAL** local FS, sandboxed to the workspace dir (paths that escape are rejected). |
-| `web_search`, `fetch_url`, `submit_job`, `get_job` | **Deterministic STUBS** — no network, no backend. SHA-derived ids so output is reproducible. |
+| `submit_job`, `get_job` | **REAL** Rockie backend (device-auth via `rockie_auth`, `$ROCKIELAB_API_URL`). |
+| `web_search`, `fetch_url` | **REAL web**, stdlib `urllib` only, **no backend dependency**. Run directly from this server so local ≡ platform. |
 | `finish` | Terminal — echoes the result string. |
 
 Result-string format follows the contract README: success = raw text or pretty JSON;
 error = `{"error":{"code","message"}}` in a single text block, with `isError: true`.
 
-**Wiring the 4 stubs to the real Rockie backend is a LATER slice** — see `../../serving/a3c-mcp.md`.
+### `web_search`
+- **Keyless default** (works for free/local/BYOK users out of the box): queries
+  DuckDuckGo's HTML endpoint and parses title/url/snippet with stdlib only. If
+  DDG rate-limits, returns a clean `rate_limited` error (never a crash).
+- **Optional BYO key** for higher quality: set `SEARCH_API_KEY` and (optionally)
+  `SEARCH_PROVIDER` ∈ {`tavily` (default), `brave`, `serper`} to route through
+  that provider instead.
+
+### `fetch_url`
+- Plain HTTP(S) GET → readable text (tags stripped via stdlib). Response capped
+  at `FETCH_URL_MAX_BYTES` (default 2 MB); the cap is reported when hit.
+- **SSRF-guarded** (the same code runs on tenant machines): refuses non-http(s)
+  schemes; resolves the host and blocks private / loopback / link-local /
+  reserved / cloud-metadata (`169.254.169.254`) ranges; re-checks the guard on
+  every redirect hop (bounded at `FETCH_MAX_REDIRECTS`).
 
 ## Wire protocol
 

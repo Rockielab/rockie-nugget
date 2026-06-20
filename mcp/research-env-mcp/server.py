@@ -13,16 +13,19 @@ headers per the MCP/LSP wire format). It:
 Side-effect policy:
   - REAL local-FS, sandboxed to a workspace dir (RESEARCH_ENV_WORKSPACE, default ./workspace):
         read_file, list_files, write_file, run_command
-  - Deterministic STUBS (no network / no backend):
-        web_search, fetch_url, submit_job, get_job
+  - REAL Rockie backend (device-auth via rockie_auth; $ROCKIELAB_API_URL):
+        submit_job, get_job
+  - Deterministic STUBS (no network / no backend) — wired in a later slice:
+        web_search, fetch_url
   - finish: terminal tool, echoes the result.
 
 Result-string format (contract README § Result-string format):
   - success: raw text, or pretty-printed JSON (2-space) for structured tools
   - error:   {"error":{"code":<stable_string>,"message":<prose>}}  as a text block
 
-Wiring the stubs to the real Rockie backend (web_search/fetch_url/submit_job/get_job)
-is a LATER slice — see a3c-mcp.md.
+Wiring web_search/fetch_url to the real backend is a LATER slice (C) — see
+a3c-mcp.md. submit_job/get_job are wired here (Slice B) against the same
+device-flow + jobs API the shipped @rockielab/cli uses.
 """
 import hashlib
 import json
@@ -30,6 +33,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+import rockie_auth
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "research-env-v1"
@@ -160,19 +165,145 @@ def t_fetch_url(args):
     )
 
 
+def _require_token():
+    """Resolve the Rockie bearer or raise the contract auth_required error."""
+    token = rockie_auth.get_token()
+    if not token:
+        raise ToolError(
+            "auth_required",
+            "not signed in to Rockie — run `nugget login` "
+            f"(or set ${rockie_auth.TOKEN_ENV_VAR}).",
+        )
+    return token
+
+
+def _parse_hardware(hardware: str) -> tuple[str, int]:
+    """Translate a capability string to the CLI's (gpu_type, gpu_count) shape.
+
+    The contract is the masking boundary: a *capability* string in, provider
+    SKU details hidden. Examples: "8xH100" → ("H100", 8); "1xA100-80GB" →
+    ("A100-80GB", 1); "cpu" → ("cpu", 0); "A100" → ("A100", 1).
+    NO provider/model-identity values are embedded — this is generic parsing.
+    """
+    s = hardware.strip()
+    if s.lower() == "cpu":
+        return ("cpu", 0)
+    count = 1
+    gpu_type = s
+    if "x" in s:
+        head, _, tail = s.partition("x")
+        if head.isdigit() and tail:
+            count = int(head)
+            gpu_type = tail
+    if not gpu_type:
+        raise ToolError("tool_error", f"could not parse hardware: {hardware!r}")
+    return (gpu_type, count)
+
+
+def _budget_ceiling_cents():
+    """The hard spend gate (Goose hooks are advisory, so the ceiling lives in the
+    tool). $NUGGET_BUDGET_CEILING_CENTS; unset → no ceiling."""
+    raw = os.environ.get("NUGGET_BUDGET_CEILING_CENTS", "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        raise ToolError(
+            "tool_error",
+            f"NUGGET_BUDGET_CEILING_CENTS must be an integer, got {raw!r}",
+        )
+
+
 def t_submit_job(args):
-    seed = f"{args['hardware']}|{args['image']}|{args['command']}"
-    return json.dumps({"handle": f"job-{_det(seed)}"}, indent=2)
+    """Translate the capability contract → the CLI's POST /api/jobs/submit body
+    (connected-ops.ts submitExperiment) and enforce the budget ceiling.
+
+    submit body: {spec:{gpu_type,gpu_count,image?}, script, env:{}, timeout_seconds}
+    submit resp: {job_id, cluster_id, state, estimated_cost_cents}
+    Returns the contract shape {"handle": job_id, ...awareness fields}.
+    """
+    token = _require_token()
+    gpu_type, gpu_count = _parse_hardware(args["hardware"])
+    ceiling = _budget_ceiling_cents()
+
+    spec = {"gpu_type": gpu_type, "gpu_count": gpu_count}
+    if args.get("image"):
+        spec["image"] = args["image"]
+    body = {
+        "spec": spec,
+        "script": args["command"],
+        "env": {},
+        "timeout_seconds": int(args.get("timeout_sec", 3600)),
+    }
+    # Pre-spend budget gate: if the backend offers a dry-run/estimate, use it to
+    # pre-check; the env switch keeps the contract stable if/when it lands.
+    dry_run = os.environ.get("NUGGET_SUBMIT_DRY_RUN", "").strip() == "1"
+    if dry_run:
+        body["dry_run"] = True
+
+    try:
+        resp = rockie_auth.request_json(
+            "POST", "/api/jobs/submit", body=body, token=token
+        )
+    except rockie_auth.AuthHttpError as e:
+        code = e.code or ("auth_required" if e.status in (401, 403) else "tool_error")
+        raise ToolError(code, e.message)
+
+    est = resp.get("estimated_cost_cents")
+    # Hard ceiling on the returned estimate. Without a dry-run the job is already
+    # submitted, so surface a loud confirmation-required error AND the handle so
+    # the caller can cancel; with a dry-run nothing was charged.
+    if ceiling is not None and isinstance(est, (int, float)) and est > ceiling:
+        raise ToolError(
+            "budget_exceeded",
+            f"estimated cost {est}c exceeds NUGGET_BUDGET_CEILING_CENTS={ceiling}c"
+            + ("" if dry_run else f" — submitted job {resp.get('job_id')} "
+               "may incur cost; cancel it if unintended"),
+        )
+
+    out = {"handle": resp.get("job_id")}
+    if resp.get("cluster_id") is not None:
+        out["cluster_id"] = resp["cluster_id"]
+    if resp.get("state") is not None:
+        out["state"] = resp["state"]
+    if est is not None:
+        out["estimated_cost_cents"] = est
+    if dry_run:
+        out["dry_run"] = True
+    return json.dumps(out, indent=2)
+
+
+# Map backend job states → contract progress (design §4.2).
+_PROGRESS = {"queued": 0.0, "pending": 0.0, "running": 0.5,
+             "succeeded": 1.0, "failed": 1.0, "cancelled": 1.0, "timeout": 1.0}
 
 
 def t_get_job(args):
+    """Poll the real job (GET /api/jobs/{id}, connected-ops.ts getJobStatus) and
+    map JobView → the contract get_job shape (state/progress/metrics/logs/artifacts).
+    Cost is surfaced for awareness only; billing is never computed in nugget."""
+    token = _require_token()
+    handle = args["handle"]
+    try:
+        job = rockie_auth.request_json(
+            "GET", f"/api/jobs/{handle}", token=token
+        )
+    except rockie_auth.AuthHttpError as e:
+        code = e.code or ("auth_required" if e.status in (401, 403) else "tool_error")
+        raise ToolError(code, e.message)
+
+    state = job.get("state", "unknown")
     return json.dumps(
         {
-            "handle": args["handle"],
-            "state": "succeeded",
-            "progress": 1.0,
-            "metrics": {"stub": True},
-            "logs": "[STUB] job logs — wire to real backend later.",
+            "handle": handle,
+            "state": state,
+            "progress": _PROGRESS.get(str(state).lower(), 0.0),
+            "metrics": {
+                "cost_so_far_cents": job.get("cost_so_far_cents"),
+                "cost_actual_cents": job.get("cost_actual_cents"),
+            },
+            "logs": job.get("last_log_line") or job.get("runpod_error") or "",
             "artifacts": [],
         },
         indent=2,

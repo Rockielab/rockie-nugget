@@ -221,19 +221,19 @@ export XDG_CONFIG_HOME="\${XDG_CONFIG_HOME:-$XDG_CONFIG_HOME}"
 # Let the Stop capture hook find Goose for \`session export\` (PATH may be bare
 # inside the hook subprocess).
 export GOOSE_BIN="\${GOOSE_BIN:-$GOOSE_BIN}"
+# Where the research-env MCP server + rockie_auth device-flow client live
+# (\`nugget login\` shells rockie_auth.py from here).
+MCP_DIR="$(dirname "$MCP_SERVER")"
 
 case "\${1:-}" in
   run)
     shift
     ;;
   login)
-    cat >&2 <<'MSG'
-nugget login: the Rockie served model is coming soon.
-For now, bring your own key (BYOK) against any compatible endpoint:
-  export OPENAI_BASE_URL=https://api.your-provider.com OPENAI_API_KEY=sk-...
-  nugget run "your task"
-MSG
-    exit 0
+    # Device-flow sign-in to the Rockie backend (served compute / GPU on-ramp).
+    # Reuses the exact device flow @rockielab/cli ships; the token is what the
+    # research-env MCP submit_job/get_job tools authenticate with.
+    exec python3 "$MCP_DIR/rockie_auth.py" login
     ;;
   ""|-h|--help)
     cat >&2 <<'MSG'
@@ -241,7 +241,7 @@ nugget — open research harness (BYOK)
 
 Usage:
   nugget run "<task>"     run a research task to completion (headless)
-  nugget login           (served model — coming soon)
+  nugget login           sign in to Rockie (device flow) for GPU jobs
 
 Model (bring your own key):
   OpenAI-compatible:   export OPENAI_BASE_URL=... OPENAI_API_KEY=sk-...

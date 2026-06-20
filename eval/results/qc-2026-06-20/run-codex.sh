@@ -12,7 +12,7 @@ REPO=$(stage_ws "$LABEL")
 # Install the rockie-codex overlay into the workspace (AGENTS.md = the codex ethos overlay).
 cp /root/nugget-qc-2026-06-20/overlays/codex-AGENTS.md "$REPO/AGENTS.md"
 
-# Per-run isolated CODEX_HOME with a DeepSeek OpenAI-compatible provider.
+# Per-run isolated CODEX_HOME with an OpenAI-compatible provider.
 CXH="$QC/ws/$LABEL/codex-home"; mkdir -p "$CXH"
 cat > "$CXH/config.toml" <<TOML
 model = "$MODEL"

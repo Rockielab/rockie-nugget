@@ -36,7 +36,7 @@ WORKSPACE_DIR="${NUGGET_WORKSPACE:-$HOME/.local/share/nugget/workspace}"
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd -P)"
 MCP_SERVER="$REPO_ROOT/mcp/research-env-mcp/server.py"
 CONTRACT_DIR="$REPO_ROOT/contract/research-env-v1"
-SKILLS_SRC="$REPO_ROOT/skills"
+OVERLAY_SRC="$REPO_ROOT/overlay"   # the Rockie overlay (hints/recipes/memory/hooks)
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
@@ -115,12 +115,60 @@ else
   say "[+] installed goose runtime → $GOOSE_BIN"
 fi
 
-# ── 2. install the Rockie skills overlay, if this checkout ships one ─────────
-SKILLS_DST="$GOOSE_CONFIG_DIR/skills"
-if [ -d "$SKILLS_SRC" ]; then
-  mkdir -p "$SKILLS_DST"
-  cp -a "$SKILLS_SRC/." "$SKILLS_DST/"
-  say "[+] installed Rockie skills overlay → $SKILLS_DST"
+# ── 2. install the Rockie overlay (hints / recipes / memory / hooks) ─────────
+# This is what turns bare Goose into a Rockie research harness (config-only, so
+# local install ≡ platform runtime — the platform mounts the same overlay tree).
+# Idempotent: recipes + hooks are refreshed; .goosehints and memory are MERGED
+# so a user's own hints/memory are never clobbered.
+#
+# Goose discovers hooks via the Open-Plugins layout: ~/.agents/plugins/<name>/
+# with a hooks.json + a hooks/ dir. We install the capture hook there. The dir
+# honors $XDG_DATA_HOME-free convention Goose uses (~/.agents), overridable for
+# the platform via $NUGGET_PLUGINS_DIR.
+PLUGINS_DIR="${NUGGET_PLUGINS_DIR:-$HOME/.agents/plugins}"
+HOOK_PLUGIN_DST="$PLUGINS_DIR/rockie-nugget"
+RECIPES_DST="$GOOSE_CONFIG_DIR/recipes"
+MEMORY_DST="$GOOSE_CONFIG_DIR/memory"
+HINTS_DST="$GOOSE_CONFIG_DIR/.goosehints"
+if [ -d "$OVERLAY_SRC" ]; then
+  # recipes + hooks: authoritative copies from the checkout (safe to overwrite).
+  mkdir -p "$RECIPES_DST" "$HOOK_PLUGIN_DST/hooks" "$MEMORY_DST"
+  [ -d "$OVERLAY_SRC/recipes" ] && cp -a "$OVERLAY_SRC/recipes/." "$RECIPES_DST/"
+  [ -d "$OVERLAY_SRC/hooks" ]   && cp -a "$OVERLAY_SRC/hooks/."   "$HOOK_PLUGIN_DST/hooks/"
+  # hooks.json belongs at the plugin root, not under hooks/.
+  cp -a "$OVERLAY_SRC/hooks/hooks.json" "$HOOK_PLUGIN_DST/hooks.json" 2>/dev/null || true
+  rm -f "$HOOK_PLUGIN_DST/hooks/hooks.json" 2>/dev/null || true
+  chmod +x "$HOOK_PLUGIN_DST"/hooks/*.sh 2>/dev/null || true
+  # Pin the memory dir the hook writes to (so it matches Goose's memory ext).
+  export NUGGET_OVERLAY_DIR="$HOOK_PLUGIN_DST"
+
+  # .goosehints: MERGE under a sentinel-delimited block so re-runs refresh the
+  # Rockie section without touching a user's own hints (loaded every turn).
+  HINTS_BEGIN="# >>> rockie-nugget overlay (managed — do not edit inside) >>>"
+  HINTS_END="# <<< rockie-nugget overlay <<<"
+  python3 - "$HINTS_DST" "$OVERLAY_SRC/goosehints" "$HINTS_BEGIN" "$HINTS_END" <<'PY'
+import sys, pathlib
+dst, src, begin, end = sys.argv[1:5]
+managed = pathlib.Path(src).read_text()
+block = f"{begin}\n{managed.rstrip()}\n{end}\n"
+p = pathlib.Path(dst)
+cur = p.read_text() if p.exists() else ""
+if begin in cur and end in cur:
+    pre = cur.split(begin)[0]
+    post = cur.split(end, 1)[1]
+    cur = pre + block.rstrip("\n") + post           # replace managed block in place
+else:
+    cur = (cur.rstrip() + "\n\n" if cur.strip() else "") + block
+p.write_text(cur)
+print(f"[+] merged Rockie ethos into {dst}")
+PY
+
+  # memory scaffold: seed category files only if absent (never clobber recalls).
+  for f in learning.txt dead-end.txt; do
+    [ -f "$MEMORY_DST/$f" ] || : > "$MEMORY_DST/$f"
+  done
+  [ -f "$OVERLAY_SRC/memory/README.md" ] && cp -a "$OVERLAY_SRC/memory/README.md" "$MEMORY_DST/README.md"
+  say "[+] installed Rockie overlay → hints:$HINTS_DST recipes:$RECIPES_DST hooks:$HOOK_PLUGIN_DST memory:$MEMORY_DST"
 fi
 
 # ── 3. write the Goose config (registers the MCP server as the tool surface) ─
@@ -129,6 +177,8 @@ CONFIG="$GOOSE_CONFIG_DIR/config.yaml"
 python3 - "$CONFIG" "$MCP_SERVER" "$CONTRACT_DIR" "$WORKSPACE_DIR" <<'PY'
 import sys
 config, server, contract, workspace = sys.argv[1:5]
+# memory: Goose builtin extension — durable cross-session learnings/dead-ends
+# (the config-only substitute for the SQLite stack; see the overlay memory dir).
 block = f"""extensions:
   research-env-v1:
     enabled: true            # REQUIRED — Goose silently drops the extension without it
@@ -141,6 +191,11 @@ block = f"""extensions:
     envs:
       RESEARCH_ENV_CONTRACT_DIR: {contract}
       RESEARCH_ENV_WORKSPACE: {workspace}
+    timeout: 300
+  memory:
+    enabled: true            # builtin: remember_memory / retrieve_memories over the memory dir
+    type: builtin
+    name: memory
     timeout: 300
 """
 open(config, "w").write(block)

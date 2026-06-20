@@ -74,10 +74,32 @@ nugget run "Reproduce the rank-enrichment result from the learned-representation
 
 `install.sh` fetches the sha-verified Goose runtime to `~/.local/bin/goose`, registers this
 repo's [`research-env-v1` MCP server](./mcp/research-env-mcp/) as the agent's tool surface in
-`~/.config/goose/config.yaml`, and installs a `nugget` launcher that maps your BYOK env to a
-Goose provider (`OPENAI_*` → openai, `ANTHROPIC_API_KEY` → anthropic). Re-running is
-idempotent. Run it headless for long-horizon work, or wire in the Rockie skills + tools to
-give the agent dispatch, GPU provisioning, and the full research toolchain.
+`~/.config/goose/config.yaml`, installs the **Rockie overlay** (below), and installs a
+`nugget` launcher that maps your BYOK env to a Goose provider (`OPENAI_*` → openai,
+`ANTHROPIC_API_KEY` → anthropic). Re-running is idempotent. Run it headless for long-horizon
+work.
+
+## The Rockie overlay
+
+Bare Goose is a capable agent; the **overlay** ([`overlay/`](./overlay/)) is what makes it
+reason like *Rockie*. It is config-only — the same files the local installer copies into
+`~/.config/goose/` are the files the platform mounts, so **local install ≡ platform runtime**.
+
+- **`overlay/goosehints`** — the ethos. The hard rules, the
+  **Plan → Research → Build → Audit → Run → Assess → Codify** loop, the pre-experiment
+  checklist, and the Brainstorm → Research → Attack → Validate waterfall. Loaded every turn.
+  The installer merges it into `~/.config/goose/.goosehints` under a managed sentinel block,
+  so your own hints are never clobbered.
+- **`overlay/recipes/`** — composable task templates: `autoresearch.yaml` (frozen-metric
+  loop), `experiment.yaml` (pre-experiment gate → `submit_job` → poll → report), and
+  `clean.yaml` (anti-slop pre-commit pass). Run one with `goose run --recipe <file>`.
+- **`overlay/memory/` + the builtin memory extension** — durable cross-session memory.
+  The agent emits `[LEARN]` / `[DEAD-END]` blocks; a `Stop` hook
+  ([`overlay/hooks/capture.sh`](./overlay/hooks/)) appends them to plain-text memory the next
+  session recalls. No database — plain files, deliberately.
+
+The overlay names no model identity or provider SKU: it is fully model-agnostic, so it works
+identically whether you run BYOK locally or against the served model on the platform.
 
 ## Evaluating a model's research ability
 
@@ -148,6 +170,7 @@ what lets the environment double as clean training data on our side.)
 
 | Path | What's there |
 |---|---|
+| [`overlay/`](./overlay/) | The Rockie overlay (config-only): the ethos `goosehints`, research `recipes/`, the memory scaffold + capture `hooks/`. This is what turns bare Goose into a Rockie harness. |
 | [`contract/`](./contract/) | The versioned tool contract (`research-env-v1`) — JSON Schemas, manifest, and the versioning discipline. This is the agent's action space. |
 | [`mcp/research-env-mcp/`](./mcp/research-env-mcp/) | A small stdlib-Python stdio MCP server that exposes the contract's tools to any MCP-native agent (e.g. Goose). |
 | [`eval/adapters/`](./eval/adapters/) | Benchmark adapters — the 3-file `prepare`/`run`/`grade` pattern for scoring a model *in-harness*. |

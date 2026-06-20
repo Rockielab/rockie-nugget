@@ -36,6 +36,10 @@ export NUGGET_WORKSPACE="$WORK/ws"
 
 BIN="$NUGGET_BIN_DIR"
 CONFIG="$XDG_CONFIG_HOME/goose/config.yaml"
+HINTS="$XDG_CONFIG_HOME/goose/.goosehints"
+RECIPES="$XDG_CONFIG_HOME/goose/recipes"
+MEMORY="$XDG_CONFIG_HOME/goose/memory"
+PLUGIN="$WORK/.agents/plugins/rockie-nugget"
 
 # On a non-Linux host the platform gate fires by design; assert that and stop.
 if [ "$(uname -s)" != "Linux" ]; then
@@ -71,6 +75,28 @@ have "$BIN/nugget"    "nugget launcher installed"
 grep -q "research-env-v1:" "$CONFIG"            && ok "config registers research-env-v1 extension"    || bad "extension not in config"
 grep -q "enabled: true"    "$CONFIG"            && ok "extension has enabled: true (required by Goose)" || bad "missing enabled: true"
 grep -q "$REPO/mcp/research-env-mcp/server.py" "$CONFIG" && ok "config points at this checkout's MCP server" || bad "MCP server path wrong"
+grep -q "memory:" "$CONFIG"                     && ok "config enables the builtin memory extension"   || bad "memory extension not in config"
+
+# ── Rockie overlay (Slices A/D/E) ────────────────────────────────────────────
+echo "${DIM}  — Rockie overlay —${RESET}"
+have "$HINTS"            ".goosehints written (ethos overlay)"
+grep -q "Plan → Research → Build → Audit → Run → Assess → Codify" "$HINTS" && ok ".goosehints carries the Rockie research loop" || bad ".goosehints missing the research loop"
+grep -q "rockie-nugget overlay (managed" "$HINTS" && ok ".goosehints uses a managed sentinel block (merge-safe)" || bad ".goosehints missing managed sentinel"
+have "$RECIPES/autoresearch.yaml"  "recipe: autoresearch.yaml installed"
+have "$RECIPES/experiment.yaml"    "recipe: experiment.yaml installed"
+have "$RECIPES/clean.yaml"         "recipe: clean.yaml installed"
+have "$PLUGIN/hooks.json"          "capture hook plugin registered (Open-Plugins)"
+have "$PLUGIN/hooks/capture.sh"    "capture hook script installed"
+[ -x "$PLUGIN/hooks/capture.sh" ] && ok "capture hook is executable" || bad "capture hook not executable"
+have "$MEMORY/learning.txt"        "memory scaffold: learning.txt seeded"
+have "$MEMORY/dead-end.txt"        "memory scaffold: dead-end.txt seeded"
+
+# Masking boundary: the overlay must name no model identity / provider SKU.
+if grep -rilE 'deepseek|stone-1|stone1\.0|stone 1\.0' "$HINTS" "$RECIPES" "$PLUGIN" "$MEMORY" 2>/dev/null | grep -q .; then
+  bad "overlay leaks a model identity / provider value (masking violation)"
+else
+  ok "overlay names no model identity (masking boundary holds)"
+fi
 
 grep -q "XDG_CONFIG_HOME" "$BIN/nugget"         && ok "launcher pins XDG_CONFIG_HOME (Goose's config var)" || bad "launcher missing XDG_CONFIG_HOME"
 grep -q "GOOSE_PROVIDER" "$BIN/nugget"          && ok "launcher maps BYOK → GOOSE_PROVIDER"          || bad "launcher missing provider map"
@@ -105,6 +131,7 @@ else
 fi
 [ "$(cat "$CONFIG")" = "$CFG_BEFORE" ] && ok "config unchanged on re-run (idempotent)" || bad "config drifted on re-run"
 [ "$(grep -c 'research-env-v1:' "$CONFIG")" = "1" ] && ok "no duplicate extension block on re-run" || bad "duplicate extension block"
+[ "$(grep -c 'rockie-nugget overlay (managed' "$HINTS")" = "1" ] && ok "no duplicate .goosehints managed block on re-run (merge idempotent)" || bad ".goosehints managed block duplicated on re-run"
 
 echo ""
 echo "${GREEN}$PASS passed${RESET}, ${RED}$FAIL failed${RESET}"

@@ -1,0 +1,63 @@
+version: "1.0.0"
+title: autoresearch
+description: >-
+  The canonical around-the-clock Rockie research loop. Pick a target, declare an
+  explicit mutation surface, lock a frozen metric, run one iteration under a hard
+  time budget, score against the frozen metric, codify a [LEARN]/[DEAD-END], and
+  propose the next iteration. Model-agnostic; uses only research-env-v1 tools.
+
+parameters:
+  - key: goal
+    input_type: string
+    requirement: required
+    description: The research goal for this loop iteration, in one sentence.
+  - key: mutation_surface
+    input_type: string
+    requirement: optional
+    default: "the single file or parameter most likely to move the metric"
+    description: >-
+      The explicit, comma-separated set of files/params allowed to change this
+      iteration. Everything else is read-only for the run.
+  - key: metric
+    input_type: string
+    requirement: optional
+    default: "the task's primary success metric (define it before iterating)"
+    description: The frozen metric. Locked for the run — no goalpost-shifting.
+  - key: time_budget_seconds
+    input_type: string
+    requirement: optional
+    default: "300"
+    description: Hard wall-clock cap for the single iteration.
+
+extensions:
+  - type: stdio
+    name: research-env-v1
+
+settings:
+  goose_provider: "{{ '${GOOSE_PROVIDER}' }}"
+  goose_model: "{{ '${GOOSE_MODEL}' }}"
+
+instructions: |
+  Run ONE iteration of the Rockie autoresearch loop. Follow it in order and do
+  not skip a stage. Use only research-env-v1 tools.
+
+  1. CONTEXT. read_file any project state/notes and prior memory you can find.
+  2. FROZEN METRIC. Restate the metric "{{ metric }}". It is locked — do not
+     change how success is measured mid-run.
+  3. MUTATION SURFACE. The ONLY things you may change this iteration:
+     {{ mutation_surface }}. Treat every other file as immutable.
+  4. PRE-EXPERIMENT CHECKLIST. State the hypothesis in one sentence; estimate
+     cost on paper; try to disprove it in five minutes; define the baseline.
+  5. ITERATE. Make the change within the mutation surface only.
+  6. RUN. Run the experiment under a {{ time_budget_seconds }}s budget. For any
+     GPU/heavy compute use submit_job/get_job — never run training locally.
+  7. SCORE against the frozen metric. Be honest; negative results are data.
+  8. DECIDE. If it improved: keep it and say why. If not: revert and say why.
+  9. CODIFY. Emit a [LEARN] block for any durable lesson, or a [DEAD-END] block
+     if you proved the direction is dead. Then propose the next iteration's
+     hypothesis + mutation surface in one line.
+
+prompt: |
+  Goal: {{ goal }}
+  Run one autoresearch iteration now, then finish with the score and the
+  proposed next iteration.

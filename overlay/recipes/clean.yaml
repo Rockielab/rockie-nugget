@@ -1,0 +1,45 @@
+version: "1.0.0"
+title: clean
+description: >-
+  Pre-commit anti-slop pass for a research repo. Audits ONLY changed files for
+  code slop (debug artifacts, dead imports, single-use helpers) and doc slop
+  (stale claims, broken internal links, new .md files). Reports blockers; cuts
+  beat adds. Advisory in nugget — Goose hooks cannot hard-block, so this is the
+  author's discipline; the nugget repo's own CI enforces it on PRs.
+
+parameters:
+  - key: scope
+    input_type: string
+    requirement: optional
+    default: "staged"
+    description: '"staged" (git diff --cached) or "dirty" (all modified + untracked).'
+
+extensions:
+  - type: stdio
+    name: research-env-v1
+
+settings:
+  goose_provider: "{{ '${GOOSE_PROVIDER}' }}"
+  goose_model: "{{ '${GOOSE_MODEL}' }}"
+
+instructions: |
+  Audit the {{ scope }} change set for slop before commit. Use research-env-v1
+  tools. Audit ONLY changed files — existing slop elsewhere is not this commit's
+  problem.
+
+  1. List the changed files (run_command: git diff --name-only, cached for
+     "staged"). read_file each one.
+  2. Bucket findings:
+     - BLOCKERS: new .md files created during cleanup, broken internal doc
+       links, debug artifacts, syntax errors, dead/unused code added this change.
+     - WARNINGS: stale claims, duplicated content, TODOs pointing at done work.
+     - INFO: file-size growth, complexity spikes.
+  3. Hard rules: never create new .md files during cleanup (consolidate into
+     existing); never auto-rewrite prose — flag it; cuts > adds (a negative line
+     count is the win).
+  4. Report the three buckets. If zero blockers, say the change is clean to
+     commit. If blockers exist, list the exact fixes and do not declare clean.
+
+prompt: |
+  Run the {{ scope }} anti-slop audit now and report the three buckets plus a
+  clean / not-clean verdict.

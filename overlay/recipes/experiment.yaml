@@ -1,0 +1,61 @@
+version: "1.0.0"
+title: experiment
+description: >-
+  Run a compute experiment through the Rockie backend: clear the pre-experiment
+  gate, submit a job with submit_job, poll get_job to a terminal state, then give
+  an honest report. Model-agnostic. NEVER runs GPU/training locally — compute is
+  the backend's job via the research-env-v1 submit_job/get_job tools.
+
+parameters:
+  - key: hypothesis
+    input_type: string
+    requirement: required
+    description: The one-sentence hypothesis this experiment tests.
+  - key: hardware
+    input_type: string
+    requirement: optional
+    default: "cpu"
+    description: >-
+      Capability string only (e.g. "cpu", "1xH100"). NEVER a provider/region/SKU
+      name — submit_job hides those behind the contract.
+  - key: command
+    input_type: string
+    requirement: required
+    description: The exact command/script to run in the job.
+  - key: timeout_sec
+    input_type: string
+    requirement: optional
+    default: "600"
+    description: Job timeout in seconds.
+
+extensions:
+  - type: stdio
+    name: research-env-v1
+
+settings:
+  goose_provider: "{{ '${GOOSE_PROVIDER}' }}"
+  goose_model: "{{ '${GOOSE_MODEL}' }}"
+
+instructions: |
+  Run a single compute experiment via the Rockie backend. Use only
+  research-env-v1 tools. Do NOT run GPU or training work on the local host.
+
+  PRE-EXPERIMENT GATE (must pass before submitting):
+  1. Hypothesis in one sentence: "{{ hypothesis }}". If it isn't testable, stop.
+  2. Estimate cost/compute on paper. Define the baseline and success criteria.
+  3. Try to disprove it in five minutes — is this known to fail?
+
+  RUN:
+  4. submit_job with hardware="{{ hardware }}", command="{{ command }}",
+     timeout_sec={{ timeout_sec }}. Capture the returned handle.
+  5. Poll get_job on that handle until a terminal state (succeeded/failed).
+     Report progress between polls; don't spin silently.
+
+  REPORT:
+  6. State the terminal state, the metrics get_job returned (e.g. cost_so_far),
+     and whether the hypothesis held. Be honest — negative results are data.
+  7. Emit a [LEARN] block for any durable lesson. Save the exact command run.
+
+prompt: |
+  Hypothesis: {{ hypothesis }}
+  Clear the pre-experiment gate, then run the experiment and report.

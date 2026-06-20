@@ -1,5 +1,5 @@
 
-    __( O)>  ● new session · openai deepseek-chat
+    __( O)>  ● new session · openai (model redacted)
    \____)    20260618_6 · ~/rockie-nugget-ws/super-pie-perf-ws/repo
      L L     goose is ready
 I'll start by understanding the workspace structure and the data files.

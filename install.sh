@@ -189,7 +189,7 @@ Usage:
 Model (bring your own key):
   OpenAI-compatible:   export OPENAI_BASE_URL=... OPENAI_API_KEY=sk-...
   Anthropic:           export ANTHROPIC_API_KEY=sk-ant-...
-  GOOSE_MODEL          pick the model name (default: deepseek-chat for openai-compatible)
+  GOOSE_MODEL          pick the model name your provider exposes (required for openai-compatible)
 MSG
     exit 0
     ;;
@@ -201,7 +201,10 @@ esac
 # ── BYOK → Goose provider mapping ───────────────────────────────────────────
 if [ -n "\${OPENAI_API_KEY:-}" ]; then
   export GOOSE_PROVIDER="\${GOOSE_PROVIDER:-openai}"
-  export GOOSE_MODEL="\${GOOSE_MODEL:-deepseek-chat}"
+  if [ -z "\${GOOSE_MODEL:-}" ]; then
+    echo "nugget: set GOOSE_MODEL to the model name your OpenAI-compatible provider exposes." >&2
+    exit 2
+  fi
 elif [ -n "\${ANTHROPIC_API_KEY:-}" ]; then
   export GOOSE_PROVIDER="\${GOOSE_PROVIDER:-anthropic}"
   export GOOSE_MODEL="\${GOOSE_MODEL:-claude-sonnet-4-20250514}"

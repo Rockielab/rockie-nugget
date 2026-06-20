@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# run.sh — drive the SUPER pie-perf task through OUR harness (Goose + research-env-v1 + DeepSeek-V3).
+# run.sh — drive the SUPER pie-perf task through OUR harness (Goose + research-env-v1 + your model).
 #
 # Integration principle: we use SUPER's task + grader, but the SCAFFOLD is OURS.
 # Goose runs with the research-env-v1 MCP extension (our 9-tool action space) mounted,
 # its FS/shell tools sandboxed to the staged task workspace. We do NOT use SUPER's native agent.
 #
-# Env required:
-#   DEEPSEEK_API_KEY   (injected inline; never persisted on the box)
+# Env required (bring your own OpenAI-compatible endpoint):
+#   OPENAI_API_KEY     (injected inline; never persisted on the box)
+#   OPENAI_BASE_URL    (your provider's OpenAI-compatible base URL)
+#   GOOSE_MODEL        (the model name your provider exposes)
 # Outputs (in $WORKSPACE/repo):
 #   answer.json        — the agent's final reported result (written via our write_file tool)
 #   transcript.txt     — full goose transcript
@@ -16,7 +18,9 @@ WORKSPACE="${WORKSPACE:-/tmp/super-pie-perf-ws}"
 REPO="$WORKSPACE/repo"
 GOOSE="${GOOSE:-goose}"  # path to your built goose binary, or just `goose` if on PATH
 CONFIG="$HOME/.config/goose/config.yaml"
-: "${DEEPSEEK_API_KEY:?set DEEPSEEK_API_KEY inline}"
+: "${OPENAI_API_KEY:?set OPENAI_API_KEY inline}"
+: "${OPENAI_BASE_URL:?set OPENAI_BASE_URL to your OpenAI-compatible endpoint}"
+: "${GOOSE_MODEL:?set GOOSE_MODEL to the model name your provider exposes}"
 
 # Point our research-env-v1 MCP server's workspace at the staged task repo.
 # (Server reads RESEARCH_ENV_WORKSPACE at startup; goose spawns it per-run from config.yaml.)
@@ -47,11 +51,11 @@ When done, write your final json-list report to answer.json using write_file, th
 EOF
 
 cd "$REPO"
-echo "[run] launching goose (DeepSeek-V3) on pie-perf via research-env-v1 ..."
-env OPENAI_API_KEY="$DEEPSEEK_API_KEY" \
-    OPENAI_BASE_URL=https://api.deepseek.com \
-    GOOSE_PROVIDER=openai \
-    GOOSE_MODEL=deepseek-chat \
+echo "[run] launching goose ($GOOSE_MODEL) on pie-perf via research-env-v1 ..."
+env OPENAI_API_KEY="$OPENAI_API_KEY" \
+    OPENAI_BASE_URL="$OPENAI_BASE_URL" \
+    GOOSE_PROVIDER="${GOOSE_PROVIDER:-openai}" \
+    GOOSE_MODEL="$GOOSE_MODEL" \
   "$GOOSE" run --no-session -t "$TASK" 2>&1 | tee "$REPO/transcript.txt"
 
 echo "[run] DONE. answer at $REPO/answer.json ; transcript at $REPO/transcript.txt"

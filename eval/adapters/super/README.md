@@ -1,7 +1,7 @@
 # SUPER adapter — first benchmark adapter for the A5 Model Arena
 
 Proves the **adapter pattern**: take ONE real, CPU-only research benchmark task, drive it
-through **OUR harness** (Goose + DeepSeek-V3 + research-env-v1 MCP), and score it with the
+through **OUR harness** (Goose + your model + research-env-v1 MCP), and score it with the
 **benchmark's own objective grader**. The harness is the fixed scaffold (scaffold-confound
 discipline) — we measure a *model in our harness*, not the benchmark's native agent.
 
@@ -16,7 +16,7 @@ model inference, no GPU, no training), and a trivially simple numeric gold answe
 | file | role |
 |------|------|
 | `prepare.sh` | **Obtain benchmark inputs.** Clones `pie-perf` @ pinned commit, downloads the two public Google-Drive inputs the task references (model generations CSV + codenet public test cases) via `gdown`, and provisions the eval tool's CPU-only python deps. Idempotent. |
-| `run.sh` | **Drive the task through OUR harness.** Points the research-env-v1 MCP workspace at the staged repo, then runs `goose run --no-session -t '<SUPER query>'` with DeepSeek-V3. The agent uses only our `list_files/read_file/write_file/run_command/finish` tools. Ends by writing `answer.json`. |
+| `run.sh` | **Drive the task through OUR harness.** Points the research-env-v1 MCP workspace at the staged repo, then runs `goose run --no-session -t '<SUPER query>'` with the model you supply (any OpenAI-compatible endpoint). The agent uses only our `list_files/read_file/write_file/run_command/finish` tools. Ends by writing `answer.json`. |
 | `grade.py` | **Score with the benchmark's own grader.** Vendors SUPER's deterministic `evaluate(predicted, gold)` *verbatim* (type-aware exact/numeric match, NOT an LLM-judge) and scores `answer.json` against the task's gold `answer`. Emits `output_match` ∈ [0,1]. |
 | `task.json` | The frozen task spec: query, gold `answer`, landmarks, and the gdrive input file IDs. |
 
@@ -26,7 +26,7 @@ model inference, no GPU, no training), and a trivially simple numeric gold answe
 SUPER task `pie-perf`
   query (verbatim)            ─┐
   + "write report to          │   goose run --no-session -t '<query>'
-     answer.json" (capture)   ─┘   provider=DeepSeek-V3, ext=research-env-v1
+     answer.json" (capture)   ─┘   provider=your model, ext=research-env-v1
                                           │
    workspace (staged by prepare.sh):      │   agent uses OUR tools only:
      repo/ (pie-perf tooling)             │     list_files → read_file → run_command
@@ -50,14 +50,15 @@ asks the model to compute*.
 # 1. stage inputs (clone + gdrive downloads + eval deps)
 bash prepare.sh
 # 2. drive through our harness (key injected inline, never persisted)
-DEEPSEEK_API_KEY=<key> bash run.sh
+#    bring your own OpenAI-compatible endpoint:
+OPENAI_API_KEY=<key> OPENAI_BASE_URL=https://api.your-provider.com GOOSE_MODEL=<model> bash run.sh
 # 3. score with SUPER's own grader
 python3 grade.py --task task.json --answer <ws>/repo/answer.json
 ```
 
 ## First end-to-end result
 
-DeepSeek-V3 in our harness, graded by SUPER's `evaluate()`: **`output_match = 0.7778`**.
+A model in our harness, graded by SUPER's `evaluate()`: **`output_match = 0.7778`**.
 See `../../first-adapter-results.md` and `artifacts/` for the transcript + answer.
 
 ## Scaling to the full arena

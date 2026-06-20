@@ -50,22 +50,34 @@ never have to care, which cloud answered).
 
 ## Quickstart
 
-> Intended interface — early; expect rough edges.
+> Bring your own key (BYOK). The installer needs a **Linux x86_64 host with glibc ≥ 2.36**
+> (Debian bookworm, Ubuntu 22.04+) and `python3` — the runtime is a Linux binary. Native
+> `cargo install` is planned ([#1953](https://github.com/Rockielab/rockie-nugget/issues/1953)).
 
 ```bash
-# install
-curl -fsSL https://rockielab.com/install.sh | sh    # or: cargo install rockie-nugget
+# install (assembles the runtime + tool surface from this checkout — config only)
+git clone https://github.com/Rockielab/rockie-nugget.git
+cd rockie-nugget
+./install.sh
 
-# point it at any OpenAI-compatible model
+# add ~/.local/bin to PATH if it isn't already
+export PATH="$HOME/.local/bin:$PATH"
+
+# point it at any OpenAI-compatible model (a frontier model, an open-weight
+# model, or your own server) — bring your own key
 export OPENAI_BASE_URL=https://api.your-provider.com   OPENAI_API_KEY=sk-...
 
 # run a research task
-rockie-nugget run "Reproduce the rank-enrichment result from the learned-representations repo
-                   and propose one experiment that would push effective rank higher."
+nugget run "Reproduce the rank-enrichment result from the learned-representations repo
+            and propose one experiment that would push effective rank higher."
 ```
 
-Run it headless for long-horizon work, or wire in the Rockie skills + tools to give the
-agent dispatch, GPU provisioning, and the full research toolchain.
+`install.sh` fetches the sha-verified Goose runtime to `~/.local/bin/goose`, registers this
+repo's [`research-env-v1` MCP server](./mcp/research-env-mcp/) as the agent's tool surface in
+`~/.config/goose/config.yaml`, and installs a `nugget` launcher that maps your BYOK env to a
+Goose provider (`OPENAI_*` → openai, `ANTHROPIC_API_KEY` → anthropic). Re-running is
+idempotent. Run it headless for long-horizon work, or wire in the Rockie skills + tools to
+give the agent dispatch, GPU provisioning, and the full research toolchain.
 
 ## Evaluating a model's research ability
 
@@ -82,8 +94,12 @@ benchmarks:
 - **MLE-bench** — Kaggle-style ML engineering
 
 ```bash
-rockie-nugget eval super --model <any-openai-compatible-model>   # one model, one harness, one number
+# run the SUPER adapter against a BYOK model (3-file prepare/run/grade contract)
+eval/adapters/super/prepare.sh && eval/adapters/super/run.sh   # one model, one harness, one number
 ```
+
+> A single `nugget eval <bench>` front-end over these adapters is on the roadmap; today
+> the adapters run directly.
 
 A note we take seriously: **the harness moves benchmark scores by double digits on its
 own**, so rockie-nugget's eval always changes one variable at a time — fix the harness to

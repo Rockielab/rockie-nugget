@@ -112,15 +112,17 @@ grep -q "GOOSE_PROVIDER" "$BIN/nugget"          && ok "launcher maps BYOK → GO
 grep -q "OPENAI_API_KEY" "$BIN/nugget"          && ok "launcher reads OPENAI_API_KEY (BYOK)"         || bad "launcher missing OPENAI_API_KEY"
 grep -q "ANTHROPIC_API_KEY" "$BIN/nugget"       && ok "launcher reads ANTHROPIC_API_KEY (BYOK)"      || bad "launcher missing ANTHROPIC_API_KEY"
 
-# login stub must be present and value-free (masking boundary).
-"$BIN/nugget" login 2>&1 | grep -qi "coming soon" && ok "nugget login is a labeled 'coming soon' stub" || bad "login stub missing/mislabeled"
-# Masking boundary: the login stub must not name the served model. The generic
-# BYOK placeholder (OPENAI_BASE_URL=api.your-provider.com) is fine; what must
-# NEVER appear is a real served-model endpoint/identity.
-if "$BIN/nugget" login 2>&1 | grep -qiE 'stone|rockielab\.com/v1|served-model-key|GOOSE_PROVIDER=[a-z]'; then
-  bad "login stub leaks served-model values (masking violation)"
+# `nugget login` wires the device flow (shells rockie_auth.py). Assert the wiring
+# statically — do NOT exec it: the device-flow poll loop blocks indefinitely
+# waiting on the backend, which would hang the suite.
+grep -q "rockie_auth.py" "$BIN/nugget" && ok "nugget login wires the device-flow client" || bad "login branch not wired to rockie_auth.py"
+# Masking boundary: the login wiring must name no served-model identity / SKU /
+# endpoint. The generic BYOK placeholder (api.your-provider.com) is fine; a real
+# served-model endpoint/identity must NEVER appear in the launcher.
+if grep -qiE 'stone|rockielab\.com/v1|served-model-key|GOOSE_PROVIDER=[a-z]' "$BIN/nugget"; then
+  bad "launcher leaks served-model values (masking violation)"
 else
-  ok "login stub leaks no served-model values"
+  ok "launcher leaks no served-model values"
 fi
 
 # launcher refuses with no key.

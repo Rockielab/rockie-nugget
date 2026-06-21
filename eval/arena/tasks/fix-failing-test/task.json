@@ -1,0 +1,8 @@
+{
+  "task_id": "fix-failing-test",
+  "kind": "debugging",
+  "grading": "unit-test-pass",
+  "answer_artifact": "roman.py",
+  "prompt": "The workspace contains roman.py (a function `to_roman(n)` that converts an integer 1..3999 to a Roman numeral) and test_roman.py (a pytest suite). The implementation has BUGS: running the tests fails. Your job is to FIX roman.py so the entire test suite passes. Do NOT edit test_roman.py — fix the implementation only.\n\nUse run_command to run the tests (e.g. `python3 -m pytest -q test_roman.py` or `python3 test_roman.py`), read the failures, and edit roman.py until all tests pass. When all tests pass, ensure roman.py is saved in the workspace root, then declare the task complete.",
+  "grade_note": "grade.py runs a FRESH, HIDDEN battery of to_roman cases against the agent's roman.py (not the visible test_roman.py, so it cannot be gamed by editing the visible suite). output_match = fraction of hidden cases passing. Deterministic, no LLM judge."
+}

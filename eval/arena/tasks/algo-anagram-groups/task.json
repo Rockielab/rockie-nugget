@@ -1,0 +1,8 @@
+{
+  "task_id": "algo-anagram-groups",
+  "kind": "algorithmic-coding",
+  "grading": "unit-test-pass",
+  "answer_artifact": "solution.py",
+  "prompt": "Implement a function in the file solution.py (in the workspace root). The function signature must be exactly:\n\n    def group_anagrams(words):\n\nIt takes a list of lowercase strings `words` and groups them so that all strings that are anagrams of one another are in the same group. Return a list of groups, where each group is a list of the original strings. Within each group, preserve the order in which the strings appeared in the input. Order the groups by the index of their first-appearing member (i.e. groups sorted by when their first element appeared in `words`).\n\nExample:\n  group_anagrams([\"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\"])\n  -> [[\"eat\", \"tea\", \"ate\"], [\"tan\", \"nat\"], [\"bat\"]]\n\nWrite ONLY the file solution.py containing the function. You may use run_command to test it. When confident, ensure solution.py is in the workspace root, then declare the task complete.",
+  "grade_note": "grade.py imports solution.group_anagrams, runs HIDDEN tests, and checks the grouping is correct (canonicalized: each group as a sorted tuple, groups as a set) AND that ordering rules hold. output_match = fraction of hidden tests passed. Deterministic, no LLM judge."
+}

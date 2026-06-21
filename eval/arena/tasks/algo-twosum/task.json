@@ -1,0 +1,8 @@
+{
+  "task_id": "algo-twosum",
+  "kind": "algorithmic-coding",
+  "grading": "unit-test-pass",
+  "answer_artifact": "solution.py",
+  "prompt": "Implement a function in the file solution.py (in the workspace root). The function signature must be exactly:\n\n    def two_sum(nums, target):\n\nIt takes a list of integers `nums` and an integer `target`, and returns a list of two distinct indices [i, j] (i < j) such that nums[i] + nums[j] == target. Exactly one such pair is guaranteed to exist for every test input. Return the indices as a Python list of two ints, with the smaller index first.\n\nExamples:\n  two_sum([2, 7, 11, 15], 9)  -> [0, 1]\n  two_sum([3, 2, 4], 6)       -> [1, 2]\n  two_sum([3, 3], 6)          -> [0, 1]\n\nWrite ONLY the file solution.py containing the function (no extra prose in the file). You may use run_command to test your implementation. When you are confident, ensure solution.py is written to the workspace root, then declare the task complete.",
+  "grade_note": "grade.py imports solution.two_sum and runs a HIDDEN unit-test battery (not shown to the agent). output_match = fraction of hidden tests passed. Pure deterministic: no LLM judge."
+}

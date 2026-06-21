@@ -1,0 +1,8 @@
+{
+  "task_id": "data-extract-csv",
+  "kind": "data-extraction",
+  "grading": "output-match",
+  "answer_artifact": "answer.json",
+  "prompt": "The workspace contains a file sales.csv with a header row and columns: region,product,units,revenue. Read it and compute, for EACH region, the total revenue (sum of the revenue column) summed across all its rows. Then write answer.json to the workspace root containing a single JSON object mapping each region name to its total revenue as a number, with the keys sorted alphabetically. For example, if the only regions were \"east\" (total 30.5) and \"west\" (total 12.0), answer.json must contain exactly:\n\n{\"east\": 30.5, \"west\": 12.0}\n\nUse the research-env tools (read_file / run_command / write_file) to inspect sales.csv and produce answer.json. When done, ensure answer.json is in the workspace root, then declare the task complete.",
+  "grade_note": "grade.py recomputes the correct region->revenue map from sales.csv independently, then compares the agent's answer.json numerically (1e-6 epsilon) AND requires the exact key set. output_match = fraction of expected keys correct (correct value + present). Deterministic exact-output match, no LLM judge."
+}

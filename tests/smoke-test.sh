@@ -56,7 +56,8 @@ fi
 # ── run 1: full install ──────────────────────────────────────────────────────
 echo ""; echo "${YELLOW}── install (run 1) ──${RESET}"
 if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
-  bash "$REPO/install.sh" >/dev/null 2>&1 || { bad "install.sh exited non-zero"; }
+  bash "$REPO/install.sh" >/dev/null 2>&1; INSTALL_EC=$?
+  [ "$INSTALL_EC" -eq 0 ] && ok "install.sh exits 0 on a clean run" || bad "install.sh exited non-zero ($INSTALL_EC)"
   have "$BIN/goose"  "goose runtime binary installed"
   [ -x "$BIN/goose" ] && ok "goose binary is executable" || bad "goose binary not executable"
 else
@@ -65,12 +66,20 @@ else
   mkdir -p "$BIN"; printf '#!/bin/sh\necho fake-goose "$@"\n' > "$BIN/goose"; chmod +x "$BIN/goose"
   # Point the pin at the fake so verify_sha passes on re-run path is not hit;
   # we instead invoke only the config/launcher writers via a guarded run.
-  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1 || true
+  # Capture the exit code explicitly — a swallowed non-zero here is exactly how
+  # the launcher-heredoc `MCP_DIR: unbound variable` regression hid from CI.
+  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1; INSTALL_EC=$?
+  [ "$INSTALL_EC" -eq 0 ] && ok "install.sh exits 0 on a clean run" || bad "install.sh exited non-zero ($INSTALL_EC)"
 fi
 
 have "$CONFIG"        "Goose config written"
 have "$BIN/nugget"    "nugget launcher installed"
 [ -x "$BIN/nugget" ] && ok "nugget launcher is executable" || bad "nugget launcher not executable"
+# The launcher heredoc is unquoted, so any var meant for runtime must be escaped.
+# `bash -n` parses the generated launcher without running it — catches a syntax
+# break and (paired with the run-2 exit-0 assertion) the install-time-unbound
+# regression that wrote a broken launcher.
+[ -e "$BIN/nugget" ] && bash -n "$BIN/nugget" 2>/dev/null && ok "generated nugget launcher parses (bash -n)" || bad "generated nugget launcher fails bash -n"
 
 grep -q "research-env-v1:" "$CONFIG"            && ok "config registers research-env-v1 extension"    || bad "extension not in config"
 grep -q "enabled: true"    "$CONFIG"            && ok "extension has enabled: true (required by Goose)" || bad "missing enabled: true"
@@ -127,7 +136,7 @@ CFG_BEFORE="$(cat "$CONFIG")"
 if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
   bash "$REPO/install.sh" >/dev/null 2>&1 || bad "second install.sh run exited non-zero"
 else
-  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1 || true
+  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1 || bad "second install.sh run exited non-zero"
 fi
 [ "$(cat "$CONFIG")" = "$CFG_BEFORE" ] && ok "config unchanged on re-run (idempotent)" || bad "config drifted on re-run"
 [ "$(grep -c 'research-env-v1:' "$CONFIG")" = "1" ] && ok "no duplicate extension block on re-run" || bad "duplicate extension block"

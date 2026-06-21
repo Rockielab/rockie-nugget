@@ -233,7 +233,7 @@ case "\${1:-}" in
     # Device-flow sign-in to the Rockie backend (served compute / GPU on-ramp).
     # Reuses the exact device flow @rockielab/cli ships; the token is what the
     # research-env MCP submit_job/get_job tools authenticate with.
-    exec python3 "$MCP_DIR/rockie_auth.py" login
+    exec python3 "\$MCP_DIR/rockie_auth.py" login
     ;;
   ""|-h|--help)
     cat >&2 <<'MSG'

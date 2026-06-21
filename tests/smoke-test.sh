@@ -56,7 +56,8 @@ fi
 # ── run 1: full install ──────────────────────────────────────────────────────
 echo ""; echo "${YELLOW}── install (run 1) ──${RESET}"
 if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
-  bash "$REPO/install.sh" >/dev/null 2>&1 || { bad "install.sh exited non-zero"; }
+  bash "$REPO/install.sh" >/dev/null 2>&1; INSTALL_EC=$?
+  [ "$INSTALL_EC" -eq 0 ] && ok "install.sh exits 0 on a clean run" || bad "install.sh exited non-zero ($INSTALL_EC)"
   have "$BIN/goose"  "goose runtime binary installed"
   [ -x "$BIN/goose" ] && ok "goose binary is executable" || bad "goose binary not executable"
 else
@@ -65,12 +66,20 @@ else
   mkdir -p "$BIN"; printf '#!/bin/sh\necho fake-goose "$@"\n' > "$BIN/goose"; chmod +x "$BIN/goose"
   # Point the pin at the fake so verify_sha passes on re-run path is not hit;
   # we instead invoke only the config/launcher writers via a guarded run.
-  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1 || true
+  # Capture the exit code explicitly — a swallowed non-zero here is exactly how
+  # the launcher-heredoc `MCP_DIR: unbound variable` regression hid from CI.
+  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1; INSTALL_EC=$?
+  [ "$INSTALL_EC" -eq 0 ] && ok "install.sh exits 0 on a clean run" || bad "install.sh exited non-zero ($INSTALL_EC)"
 fi
 
 have "$CONFIG"        "Goose config written"
 have "$BIN/nugget"    "nugget launcher installed"
 [ -x "$BIN/nugget" ] && ok "nugget launcher is executable" || bad "nugget launcher not executable"
+# The launcher heredoc is unquoted, so any var meant for runtime must be escaped.
+# `bash -n` parses the generated launcher without running it — catches a syntax
+# break and (paired with the run-2 exit-0 assertion) the install-time-unbound
+# regression that wrote a broken launcher.
+[ -e "$BIN/nugget" ] && bash -n "$BIN/nugget" 2>/dev/null && ok "generated nugget launcher parses (bash -n)" || bad "generated nugget launcher fails bash -n"
 
 grep -q "research-env-v1:" "$CONFIG"            && ok "config registers research-env-v1 extension"    || bad "extension not in config"
 grep -q "enabled: true"    "$CONFIG"            && ok "extension has enabled: true (required by Goose)" || bad "missing enabled: true"
@@ -103,15 +112,17 @@ grep -q "GOOSE_PROVIDER" "$BIN/nugget"          && ok "launcher maps BYOK → GO
 grep -q "OPENAI_API_KEY" "$BIN/nugget"          && ok "launcher reads OPENAI_API_KEY (BYOK)"         || bad "launcher missing OPENAI_API_KEY"
 grep -q "ANTHROPIC_API_KEY" "$BIN/nugget"       && ok "launcher reads ANTHROPIC_API_KEY (BYOK)"      || bad "launcher missing ANTHROPIC_API_KEY"
 
-# login stub must be present and value-free (masking boundary).
-"$BIN/nugget" login 2>&1 | grep -qi "coming soon" && ok "nugget login is a labeled 'coming soon' stub" || bad "login stub missing/mislabeled"
-# Masking boundary: the login stub must not name the served model. The generic
-# BYOK placeholder (OPENAI_BASE_URL=api.your-provider.com) is fine; what must
-# NEVER appear is a real served-model endpoint/identity.
-if "$BIN/nugget" login 2>&1 | grep -qiE 'stone|rockielab\.com/v1|served-model-key|GOOSE_PROVIDER=[a-z]'; then
-  bad "login stub leaks served-model values (masking violation)"
+# `nugget login` wires the device flow (shells rockie_auth.py). Assert the wiring
+# statically — do NOT exec it: the device-flow poll loop blocks indefinitely
+# waiting on the backend, which would hang the suite.
+grep -q "rockie_auth.py" "$BIN/nugget" && ok "nugget login wires the device-flow client" || bad "login branch not wired to rockie_auth.py"
+# Masking boundary: the login wiring must name no served-model identity / SKU /
+# endpoint. The generic BYOK placeholder (api.your-provider.com) is fine; a real
+# served-model endpoint/identity must NEVER appear in the launcher.
+if grep -qiE 'stone|rockielab\.com/v1|served-model-key|GOOSE_PROVIDER=[a-z]' "$BIN/nugget"; then
+  bad "launcher leaks served-model values (masking violation)"
 else
-  ok "login stub leaks no served-model values"
+  ok "launcher leaks no served-model values"
 fi
 
 # launcher refuses with no key.
@@ -127,7 +138,7 @@ CFG_BEFORE="$(cat "$CONFIG")"
 if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
   bash "$REPO/install.sh" >/dev/null 2>&1 || bad "second install.sh run exited non-zero"
 else
-  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1 || true
+  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1 || bad "second install.sh run exited non-zero"
 fi
 [ "$(cat "$CONFIG")" = "$CFG_BEFORE" ] && ok "config unchanged on re-run (idempotent)" || bad "config drifted on re-run"
 [ "$(grep -c 'research-env-v1:' "$CONFIG")" = "1" ] && ok "no duplicate extension block on re-run" || bad "duplicate extension block"

@@ -19,7 +19,7 @@ live rule: **within one eval/experiment run, one version is used end-to-end.** S
 | `read_file` | workspace read | `path` | file text |
 | `list_files` | workspace listing | — (`path` defaults `.`) | one workspace-relative path per line |
 | `write_file` | workspace write | `path`, `content` | confirmation (path + bytes written) |
-| `run_command` | execute (CPU sandbox) | `command` | combined stdout+stderr + exit code |
+| `run_command` | execute (CPU sandbox) | `command` | stdout first; optional labeled `[stderr]` block; explicit `[exit <code>]`; non-UTF-8 bytes are replacement-decoded; oversized streams use explicit truncation markers |
 | `submit_job` | run a GPU experiment | `hardware`, `image`, `command` | opaque job `handle` |
 | `get_job` | get experiment result | `handle` | normalized state / metrics / logs / artifact paths |
 | `finish` | terminate with a result | `result` | (terminal; ends the loop) |

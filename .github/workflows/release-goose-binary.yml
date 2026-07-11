@@ -118,8 +118,10 @@ jobs:
             bash -euxo pipefail -c '
               apt-get update
               DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-                ca-certificates python3 python3-pytest python3-yaml
+                ca-certificates curl python3 python3-pytest python3-yaml
               rm -rf /var/lib/apt/lists/*
+              command -v curl >/dev/null
+              command -v python3 >/dev/null
               ldd --version 2>&1 | head -1 | grep -F " 2.36"
               /release/goose --version | tee /tmp/goose-version
               grep -F "$GOOSE_VERSION" /tmp/goose-version

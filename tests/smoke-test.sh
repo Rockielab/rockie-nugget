@@ -56,6 +56,18 @@ fi
 # ── run 1: full install ──────────────────────────────────────────────────────
 echo ""; echo "${YELLOW}── install (run 1) ──${RESET}"
 if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
+  # The release workflow prepares the raw binary before the Rockie release
+  # asset exists. Pre-place that exact executable so install.sh exercises its
+  # normal hash-verification/idempotency path without fetching a not-yet-
+  # published asset.
+  if [ -n "${NUGGET_SMOKE_PREBUILT_GOOSE:-}" ]; then
+    if [ ! -f "$NUGGET_SMOKE_PREBUILT_GOOSE" ]; then
+      bad "prebuilt Goose binary missing: $NUGGET_SMOKE_PREBUILT_GOOSE"
+    else
+      mkdir -p "$BIN"
+      install -m 0755 "$NUGGET_SMOKE_PREBUILT_GOOSE" "$BIN/goose"
+    fi
+  fi
   bash "$REPO/install.sh" >/dev/null 2>&1; INSTALL_EC=$?
   [ "$INSTALL_EC" -eq 0 ] && ok "install.sh exits 0 on a clean run" || bad "install.sh exited non-zero ($INSTALL_EC)"
   have "$BIN/goose"  "goose runtime binary installed"

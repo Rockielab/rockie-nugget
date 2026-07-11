@@ -19,9 +19,9 @@
 set -euo pipefail
 
 # ── release pin (the only thing that changes when Goose is rebuilt) ──────────
-GOOSE_TAG="nugget-goose-v1.38.0-glibc236"
+GOOSE_TAG="nugget-goose-v1.41.0-glibc236"
 GOOSE_ASSET="goose"
-GOOSE_SHA256="489391da775fcdafbda8bf2322b15580938f3fdad243cc8e7d03bc1e0530be98"
+GOOSE_SHA256="19f40a9c7d24d4ef791c605c0879eb67bb9f5dabd3bae18dc603e5554f4d3c93"
 GOOSE_REPO="Rockielab/rockie-nugget"
 
 # ── install locations (well-known dirs only) ────────────────────────────────

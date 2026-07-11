@@ -1,0 +1,188 @@
+name: release-goose-binary
+
+# The raw Rockie asset is created only after a reviewed pin reaches main.
+# There is intentionally no workflow_dispatch entrypoint.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "install.sh"
+      - "README.md"
+      - "scripts/prepare-goose-release.py"
+      - "tests/smoke-test.sh"
+      - "tests/test_prepare_goose_release.py"
+      - ".github/workflows/release-goose-binary.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-goose-binary
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'Rockielab/rockie-nugget'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOOSE_VERSION: "1.41.0"
+      UPSTREAM_REPO: "aaif-goose/goose"
+      UPSTREAM_ASSET: "goose-x86_64-unknown-linux-gnu.tar.gz"
+      UPSTREAM_URL: "https://github.com/aaif-goose/goose/releases/download/v1.41.0/goose-x86_64-unknown-linux-gnu.tar.gz"
+      UPSTREAM_ARCHIVE_SHA256: "cd8e78455734d68cc43abc6dacea8e38ae00160fc1245ce959c3558fd61898a5"
+      RAW_GOOSE_SHA256: "19f40a9c7d24d4ef791c605c0879eb67bb9f5dabd3bae18dc603e5554f4d3c93"
+      RELEASE_TAG: "nugget-goose-v1.41.0-glibc236"
+      DEBIAN_BOOKWORM_SLIM_IMAGE: "debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df"
+
+    steps:
+      - name: Check out the merged revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate immutable release pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == "push" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$UPSTREAM_REPO" == "aaif-goose/goose" ]]
+          [[ "$UPSTREAM_URL" == "https://github.com/$UPSTREAM_REPO/releases/download/v$GOOSE_VERSION/$UPSTREAM_ASSET" ]]
+          [[ "$UPSTREAM_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$RAW_GOOSE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$RELEASE_TAG" == "nugget-goose-v${GOOSE_VERSION}-glibc236" ]]
+
+          install_tag="$(sed -nE 's/^GOOSE_TAG="([^"]+)"/\1/p' install.sh)"
+          install_asset="$(sed -nE 's/^GOOSE_ASSET="([^"]+)"/\1/p' install.sh)"
+          install_sha="$(sed -nE 's/^GOOSE_SHA256="([^"]+)"/\1/p' install.sh)"
+          install_repo="$(sed -nE 's/^GOOSE_REPO="([^"]+)"/\1/p' install.sh)"
+          [[ "$install_tag" == "$RELEASE_TAG" ]]
+          [[ "$install_asset" == "goose" ]]
+          [[ "$install_sha" == "$RAW_GOOSE_SHA256" ]]
+          [[ "$install_repo" == "$GITHUB_REPOSITORY" ]]
+
+      - name: Verify official upstream release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json="$(gh api "repos/$UPSTREAM_REPO/releases/tags/v$GOOSE_VERSION")"
+          jq -e \
+            --arg tag "v$GOOSE_VERSION" \
+            --arg asset "$UPSTREAM_ASSET" \
+            --arg url "$UPSTREAM_URL" \
+            --arg digest "sha256:$UPSTREAM_ARCHIVE_SHA256" '
+              .tag_name == $tag
+              and .draft == false
+              and .prerelease == false
+              and ([.assets[] | select(
+                .name == $asset
+                and .browser_download_url == $url
+                and .digest == $digest
+              )] | length == 1)
+            ' <<<"$release_json" >/dev/null
+
+      - name: Download, verify, and extract one raw executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/goose-release"
+          mkdir -p "$release_dir"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 3 --retry-all-errors \
+            --output "$release_dir/$UPSTREAM_ASSET" \
+            "$UPSTREAM_URL"
+          printf '%s  %s\n' "$UPSTREAM_ARCHIVE_SHA256" "$release_dir/$UPSTREAM_ASSET" | sha256sum -c -
+          python3 scripts/prepare-goose-release.py \
+            --archive "$release_dir/$UPSTREAM_ASSET" \
+            --output "$release_dir/goose" \
+            --archive-sha256 "$UPSTREAM_ARCHIVE_SHA256" \
+            --raw-sha256 "$RAW_GOOSE_SHA256"
+
+      - name: Run archive safety regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_prepare_goose_release.py' -v
+          bash -n install.sh tests/smoke-test.sh
+
+      - name: Prove binary and harness on glibc 2.36
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e GOOSE_VERSION="$GOOSE_VERSION" \
+            -v "$GITHUB_WORKSPACE:/repo:ro" \
+            -v "$RUNNER_TEMP/goose-release:/release:ro" \
+            "$DEBIAN_BOOKWORM_SLIM_IMAGE" \
+            bash -euxo pipefail -c '
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                ca-certificates python3 python3-pytest python3-yaml
+              rm -rf /var/lib/apt/lists/*
+              ldd --version 2>&1 | head -1 | grep -F " 2.36"
+              /release/goose --version | tee /tmp/goose-version
+              grep -F "$GOOSE_VERSION" /tmp/goose-version
+              NUGGET_SMOKE_FETCH=1 \
+                NUGGET_SMOKE_PREBUILT_GOOSE=/release/goose \
+                bash /repo/tests/smoke-test.sh
+              cd /repo/mcp/research-env-mcp
+              python3 -m unittest test_run_command test_web_tools test_gpu_tools -v
+              cd /repo
+              python3 -m pytest -q tests/test_overlay_attribution.py
+            '
+
+      - name: Publish or verify immutable Rockie release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/goose-release"
+          release_json="$RUNNER_TEMP/rockie-release.json"
+
+          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json" 2>/dev/null; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --latest=false \
+              --title "nugget Goose runtime binary — v${GOOSE_VERSION} (glibc-2.36)" \
+              --notes "Raw Goose v${GOOSE_VERSION} executable extracted from the official ${UPSTREAM_REPO} Linux x86_64 archive. Upstream archive SHA-256: ${UPSTREAM_ARCHIVE_SHA256}. Raw executable SHA-256: ${RAW_GOOSE_SHA256}."
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json"
+          fi
+
+          asset_count="$(jq '[.assets[] | select(.name == "goose")] | length' "$release_json")"
+          total_count="$(jq '.assets | length' "$release_json")"
+          if [[ "$asset_count" == "0" && "$total_count" == "0" ]]; then
+            gh release upload "$RELEASE_TAG" "$release_dir/goose#goose" \
+              --repo "$GITHUB_REPOSITORY"
+          elif [[ "$asset_count" != "1" || "$total_count" != "1" ]]; then
+            echo "release contains an unexpected asset set" >&2
+            exit 1
+          fi
+
+          for attempt in 1 2 3 4 5; do
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json"
+            if jq -e \
+              --arg digest "sha256:$RAW_GOOSE_SHA256" '
+                .draft == false
+                and .prerelease == false
+                and (.assets | length == 1)
+                and .assets[0].name == "goose"
+                and .assets[0].digest == $digest
+              ' "$release_json" >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == "5" ]]; then
+              echo "published asset digest did not converge" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          asset_id="$(jq -r '.assets[0].id' "$release_json")"
+          gh api \
+            -H 'Accept: application/octet-stream' \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+            >"$RUNNER_TEMP/published-goose"
+          printf '%s  %s\n' "$RAW_GOOSE_SHA256" "$RUNNER_TEMP/published-goose" | sha256sum -c -

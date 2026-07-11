@@ -122,7 +122,9 @@ jobs:
               rm -rf /var/lib/apt/lists/*
               command -v curl >/dev/null
               command -v python3 >/dev/null
-              ldd --version 2>&1 | head -1 | grep -F " 2.36"
+              ldd_version="$(ldd --version 2>&1)"
+              IFS= read -r ldd_first_line <<<"$ldd_version"
+              grep -F " 2.36" <<<"$ldd_first_line"
               /release/goose --version | tee /tmp/goose-version
               grep -F "$GOOSE_VERSION" /tmp/goose-version
               NUGGET_SMOKE_FETCH=1 \

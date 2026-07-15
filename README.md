@@ -80,11 +80,11 @@ repo's [`research-env-v1` MCP server](./mcp/research-env-mcp/) as the agent's to
 work.
 
 The current binary pin is the Rockie release
-`nugget-goose-v1.41.0-glibc236`, asset `goose`, SHA-256
-`19f40a9c7d24d4ef791c605c0879eb67bb9f5dabd3bae18dc603e5554f4d3c93`.
+`nugget-goose-v1.43.0-glibc236`, asset `goose`, SHA-256
+`05145ebae89b95aac7d440477fffbdfa999124c60626e5f6209ae24aedc897ba`.
 That raw executable is extracted only by the merge-to-main release workflow from the
-official `aaif-goose/goose` v1.41.0 Linux x86_64 archive, whose SHA-256 is
-`cd8e78455734d68cc43abc6dacea8e38ae00160fc1245ce959c3558fd61898a5`.
+official `aaif-goose/goose` v1.43.0 Linux x86_64 archive, whose SHA-256 is
+`a9a96f559a8b5f20b11597b78e4aa5bb0b9b29796ec4f808ca466a3f59a5ec20`.
 
 ## The Rockie overlay
 

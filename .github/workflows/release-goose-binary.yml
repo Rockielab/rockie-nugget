@@ -26,13 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      GOOSE_VERSION: "1.41.0"
+      GOOSE_VERSION: "1.43.0"
       UPSTREAM_REPO: "aaif-goose/goose"
       UPSTREAM_ASSET: "goose-x86_64-unknown-linux-gnu.tar.gz"
-      UPSTREAM_URL: "https://github.com/aaif-goose/goose/releases/download/v1.41.0/goose-x86_64-unknown-linux-gnu.tar.gz"
-      UPSTREAM_ARCHIVE_SHA256: "cd8e78455734d68cc43abc6dacea8e38ae00160fc1245ce959c3558fd61898a5"
-      RAW_GOOSE_SHA256: "19f40a9c7d24d4ef791c605c0879eb67bb9f5dabd3bae18dc603e5554f4d3c93"
-      RELEASE_TAG: "nugget-goose-v1.41.0-glibc236"
+      UPSTREAM_URL: "https://github.com/aaif-goose/goose/releases/download/v1.43.0/goose-x86_64-unknown-linux-gnu.tar.gz"
+      UPSTREAM_ARCHIVE_SHA256: "a9a96f559a8b5f20b11597b78e4aa5bb0b9b29796ec4f808ca466a3f59a5ec20"
+      RAW_GOOSE_SHA256: "05145ebae89b95aac7d440477fffbdfa999124c60626e5f6209ae24aedc897ba"
+      RELEASE_TAG: "nugget-goose-v1.43.0-glibc236"
       DEBIAN_BOOKWORM_SLIM_IMAGE: "debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df"
 
     steps:

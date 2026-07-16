@@ -1,6 +1,6 @@
 # research-env-v1 — stdio MCP server (thin shim)
 
-A dependency-free Python (stdlib-only) MCP server that exposes the 9 `research-env-v1`
+A dependency-free Python 3.10+ (stdlib-only) MCP server that exposes the 9 `research-env-v1`
 tools to an MCP client (Goose 1.38) over **stdio JSON-RPC 2.0**. ~250 LOC, no framework.
 
 ## How it loads the contract (CANONICAL source — nothing hardcoded except dispatch)

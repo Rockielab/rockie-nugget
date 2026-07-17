@@ -271,7 +271,7 @@ else
 fi
 
 # Run inside a named session (not --no-session) so the Stop capture hook can
-# `goose session export` the turn to persist [LEARN]/[DEAD-END] memory. Override
+# \`goose session export\` the turn to persist [LEARN]/[DEAD-END] memory. Override
 # the session name with NUGGET_SESSION if you want a stable resumable handle.
 exec "\$GOOSE" run --name "\${NUGGET_SESSION:-nugget-\$(date +%Y%m%d-%H%M%S)}" -t "\$*"
 NUGGET_EOF

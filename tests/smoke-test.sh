@@ -5,7 +5,11 @@
 #   • fetches + sha-verifies the goose runtime binary onto PATH,
 #   • writes a Goose config that registers the research-env-v1 MCP server,
 #   • installs a `nugget` launcher that maps BYOK env → Goose provider,
-#   • is idempotent (a second run is a no-op re-verify, no duplicate config).
+#   • is idempotent (a second run is a no-op re-verify, no duplicate config),
+#   • installs a SessionStart hook that re-surfaces the installed-skills
+#     inventory from ./skills/ at session start, falling back cleanly on
+#     missing/malformed SKILL.md and capping large counts at 40 (see
+#     issue #24 for why this can't yet re-fire after in-session compaction).
 #
 # Does NOT call a model — that's the live dogfood (see PR body). This proves the
 # assembler wrote the right files. Exits 0 on success, 1 on first failure.
@@ -188,6 +192,114 @@ have "$PLUGIN/hooks/capture.sh"    "capture hook script installed"
 [ -x "$PLUGIN/hooks/capture.sh" ] && ok "capture hook is executable" || bad "capture hook not executable"
 have "$MEMORY/learning.txt"        "memory scaffold: learning.txt seeded"
 have "$MEMORY/dead-end.txt"        "memory scaffold: dead-end.txt seeded"
+have "$PLUGIN/hooks/session-start.sh" "SessionStart hook script installed"
+[ -x "$PLUGIN/hooks/session-start.sh" ] && ok "SessionStart hook is executable" || bad "SessionStart hook not executable"
+grep -q '"SessionStart"' "$PLUGIN/hooks/hooks.json" && ok "hooks.json registers SessionStart (not just Stop)" || bad "hooks.json missing SessionStart registration"
+
+# ── Installed skills inventory (SessionStart hook) ───────────────────────────
+# find-skills.yaml pulls skills into a workspace-relative ./skills/ (read_file's
+# sandbox rejects anything outside the workspace — see that recipe). This hook
+# re-surfaces what's there at session start so a pulled skill doesn't silently
+# stop getting read once the turn that pulled it ages out of context. Unlike
+# rockie-claude/rockie-codex, this canNOT be proven to re-fire after an
+# in-session compaction — Goose documents no PreCompact/PostCompact event or
+# `compact` SessionStart matcher as of this writing — so these assertions only
+# cover the session-start path, which is the part that's actually implemented.
+echo ""; echo "${YELLOW}── installed skills inventory (SessionStart hook) ──${RESET}"
+
+SKILLS_WS="$WORK/skills-ws"
+mkdir -p "$SKILLS_WS/skills/well-formed"
+cat > "$SKILLS_WS/skills/well-formed/SKILL.md" <<'EOF'
+---
+name: well-formed
+description: A normal skill with a clean frontmatter description line.
+---
+
+# well-formed
+Body text.
+EOF
+
+# Malformed frontmatter: opens but never closes, and has no description key —
+# only prose follows. Must fall back to the first prose line rather than
+# crash the hook or leak a raw YAML/fence line as the "description".
+mkdir -p "$SKILLS_WS/skills/malformed-frontmatter"
+cat > "$SKILLS_WS/skills/malformed-frontmatter/SKILL.md" <<'EOF'
+---
+name: malformed-frontmatter
+
+Some prose line that should be picked up as the fallback description.
+EOF
+
+# No frontmatter at all — just prose. name falls back to the dir name,
+# description falls back to the first non-empty line in the file.
+mkdir -p "$SKILLS_WS/skills/no-frontmatter"
+cat > "$SKILLS_WS/skills/no-frontmatter/SKILL.md" <<'EOF'
+# no-frontmatter
+
+This skill ships with no YAML frontmatter block whatsoever.
+EOF
+
+# Skill dir with no SKILL.md at all — must be skipped silently, not fail.
+mkdir -p "$SKILLS_WS/skills/no-skill-md/scripts"
+echo "print('hi')" > "$SKILLS_WS/skills/no-skill-md/scripts/helper.py"
+
+SKILLS_JSON=$(printf '{"working_dir": "%s"}' "$SKILLS_WS" | bash "$PLUGIN/hooks/session-start.sh" 2>/dev/null)
+SKILLS_RC=$?
+[ "$SKILLS_RC" = "0" ] && ok "SessionStart hook exits 0 with a populated ./skills/" || bad "SessionStart hook exited $SKILLS_RC"
+SKILLS_CTX=$(printf '%s' "$SKILLS_JSON" | python3 -c 'import sys,json
+try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
+except Exception: print("")' 2>/dev/null)
+
+[ "$(printf '%s' "$SKILLS_CTX" | grep -c '## Installed skills')" = "1" ] \
+  && ok "installed skills section renders" || bad "installed skills section did not render"
+printf '%s' "$SKILLS_CTX" | grep -q 'well-formed\*\* — A normal skill with a clean frontmatter' \
+  && ok "well-formed skill shows its frontmatter description" || bad "well-formed skill description wrong/missing"
+printf '%s' "$SKILLS_CTX" | grep -q 'malformed-frontmatter\*\* — Some prose line that should be picked up' \
+  && ok "malformed-frontmatter skill falls back to first prose line, no raw fence/YAML leaked" \
+  || bad "malformed-frontmatter fallback wrong/missing"
+printf '%s' "$SKILLS_CTX" | grep -q 'no-frontmatter\*\* — no-frontmatter' \
+  && ok "no-frontmatter skill falls back to dir name + first line" || bad "no-frontmatter fallback wrong/missing"
+[ "$(printf '%s' "$SKILLS_CTX" | grep -c 'no-skill-md')" = "0" ] \
+  && ok "no-skill-md dir is skipped, not listed" || bad "no-skill-md dir leaked into the inventory"
+printf '%s' "$SKILLS_CTX" | grep -q 'read_file' \
+  && ok "nudge tells the agent to read_file the SKILL.md (Goose has no skill invocation)" \
+  || bad "nudge missing the read_file guidance"
+
+# Missing ./skills/ dir entirely — silent skip, no crash, no JSON emitted at all.
+EMPTY_WS="$WORK/empty-ws"
+mkdir -p "$EMPTY_WS"
+EMPTY_OUT=$(printf '{"working_dir": "%s"}' "$EMPTY_WS" | bash "$PLUGIN/hooks/session-start.sh" 2>/dev/null)
+EMPTY_RC=$?
+[ "$EMPTY_RC" = "0" ] && ok "missing ./skills/ dir: hook still exits 0" || bad "missing ./skills/ dir: exit $EMPTY_RC"
+[ -z "$EMPTY_OUT" ] && ok "missing ./skills/ dir: no output emitted (stays silent)" || bad "missing ./skills/ dir: unexpected output: $EMPTY_OUT"
+
+# Garbage/empty stdin must never crash the hook (fail-open contract).
+printf 'not json {{{' | bash "$PLUGIN/hooks/session-start.sh" >/dev/null 2>&1
+[ "$?" = "0" ] && ok "garbage stdin: hook still exits 0" || bad "garbage stdin crashed the hook"
+
+# Large count: cap at 40 with a "+N more" line rather than growing unbounded.
+CAP_WS="$WORK/cap-ws"
+for i in $(seq -w 1 45); do
+  d="$CAP_WS/skills/fixture-skill-$i"
+  mkdir -p "$d"
+  cat > "$d/SKILL.md" <<EOF
+---
+name: fixture-skill-$i
+description: Fixture skill number $i for the cap test.
+---
+Body.
+EOF
+done
+CAP_JSON=$(printf '{"working_dir": "%s"}' "$CAP_WS" | bash "$PLUGIN/hooks/session-start.sh" 2>/dev/null)
+CAP_CTX=$(printf '%s' "$CAP_JSON" | python3 -c 'import sys,json
+try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
+except Exception: print("")' 2>/dev/null)
+[ "$(printf '%s' "$CAP_CTX" | grep -c '## Installed skills (45)')" = "1" ] \
+  && ok "45 skills: header reports the true total of 45" || bad "45-skill total wrong"
+[ "$(printf '%s' "$CAP_CTX" | grep -c '+5 more')" = "1" ] \
+  && ok "45 skills: '+5 more' overflow line present" || bad "45-skill overflow line missing"
+LISTED_COUNT=$(printf '%s' "$CAP_CTX" | grep -c '^- \*\*fixture-skill-')
+[ "$LISTED_COUNT" = "40" ] && ok "45 skills: list itself capped at 40 lines" || bad "45-skill cap not enforced (got $LISTED_COUNT)"
 
 # Masking boundary: the overlay must name no model identity / provider SKU.
 if grep -rilE 'deepseek|stone-1|stone1\.0|stone 1\.0' "$HINTS" "$RECIPES" "$PLUGIN" "$MEMORY" 2>/dev/null | grep -q .; then

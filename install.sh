@@ -122,9 +122,10 @@ fi
 # so a user's own hints/memory are never clobbered.
 #
 # Goose discovers hooks via the Open-Plugins layout: ~/.agents/plugins/<name>/
-# with a hooks.json + a hooks/ dir. We install the capture hook there. The dir
-# honors $XDG_DATA_HOME-free convention Goose uses (~/.agents), overridable for
-# the platform via $NUGGET_PLUGINS_DIR.
+# with a hooks.json + a hooks/ dir. We install the hook scripts there (Stop
+# capture + SessionStart installed-skills inventory). The dir honors
+# $XDG_DATA_HOME-free convention Goose uses (~/.agents), overridable for the
+# platform via $NUGGET_PLUGINS_DIR.
 PLUGINS_DIR="${NUGGET_PLUGINS_DIR:-$HOME/.agents/plugins}"
 HOOK_PLUGIN_DST="$PLUGINS_DIR/rockie-nugget"
 RECIPES_DST="$GOOSE_CONFIG_DIR/recipes"

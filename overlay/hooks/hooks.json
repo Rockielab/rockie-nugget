@@ -1,6 +1,16 @@
 {
-  "_comment": "nugget overlay hooks (Open-Plugins spec). Goose discovers this via ~/.agents/plugins/rockie-nugget/. Goose hooks are ADVISORY/non-blocking by design — this set only captures durable memory at session end, never gates a tool. NUGGET_OVERLAY_DIR resolves to the plugin dir whether run locally or on the platform.",
+  "_comment": "nugget overlay hooks (Open-Plugins spec). Goose discovers this via ~/.agents/plugins/rockie-nugget/. Goose hooks are ADVISORY/non-blocking by design — this set captures durable memory at session end (Stop) and emits an installed-skills inventory at session start (SessionStart); neither ever gates a tool. NUGGET_OVERLAY_DIR resolves to the plugin dir whether run locally or on the platform.",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${NUGGET_OVERLAY_DIR:-$HOME/.agents/plugins/rockie-nugget}/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

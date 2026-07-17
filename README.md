@@ -111,6 +111,12 @@ reason like *Rockie*. It is config-only — the same files the local installer c
   The agent emits `[LEARN]` / `[DEAD-END]` blocks; a `Stop` hook
   ([`overlay/hooks/capture.sh`](./overlay/hooks/)) appends them to plain-text memory the next
   session recalls. No database — plain files, deliberately.
+- **`overlay/hooks/session-start.sh`** — a `SessionStart` hook that re-surfaces the
+  installed-skills inventory (anything pulled into `./skills/` via `find-skills.yaml`) at the
+  top of every session, so a skill you pulled earlier doesn't silently stop getting read once
+  that turn ages out of context. Fires at genuine session start; Goose does not yet expose a
+  compaction-lifecycle hook the way Claude Code/Codex do, so it can't re-fire mid-session after
+  an in-session compaction ([tracked in #24](https://github.com/Rockielab/rockie-nugget/issues/24)).
 - **`overlay/ATTRIBUTION.yaml`** — the public attribution manifest for this
   config-only overlay and the upstream community skill credits it references.
   Nugget does not ship direct `SKILL.md` mirrors, so this manifest is the

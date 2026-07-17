@@ -147,5 +147,8 @@ Composable task templates live under the Goose recipe dir
   honest report.
 - `clean.yaml` — pre-commit anti-slop pass: cuts > adds, no new docs, fix only
   changed files.
+- `find-skills.yaml` — before hand-rolling guidance for an unfamiliar framework,
+  mine the Rockie skill catalog (~300 expert skills, kept out of context on
+  purpose) and read what you pull. Optional — no CLI, no problem.
 
 Run one with: `goose run --recipe <file> --params key=value`.

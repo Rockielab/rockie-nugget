@@ -41,6 +41,68 @@ RECIPES="$XDG_CONFIG_HOME/goose/recipes"
 MEMORY="$XDG_CONFIG_HOME/goose/memory"
 PLUGIN="$WORK/.agents/plugins/rockie-nugget"
 
+# ── skill-catalog on-ramp (source-level; runs on every host) ─────────────────
+# These assert the *content* of the overlay, so they run before the Linux-only
+# platform gate below — otherwise they'd never execute on a contributor's Mac.
+echo ""; echo "${YELLOW}── skill catalog on-ramp ──${RESET}"
+FS_RECIPE="$REPO/overlay/recipes/find-skills.yaml"
+have "$FS_RECIPE" "find-skills recipe present in the overlay"
+
+# Same top-level schema as the recipes that already work. Derived from
+# experiment.yaml rather than hardcoded, so this tracks the convention if it
+# moves. Deliberately dependency-free (no PyYAML): this file sandboxes $HOME,
+# which hides user-site packages, and the rest of the suite imports nothing.
+SCHEMA_MISSING=""
+for k in $(grep -oE '^[a-z_]+:' "$REPO/overlay/recipes/experiment.yaml" | tr -d ':' | sort -u); do
+  grep -qE "^${k}:" "$FS_RECIPE" || SCHEMA_MISSING="$SCHEMA_MISSING $k"
+done
+[ -z "$SCHEMA_MISSING" ] \
+  && ok "find-skills.yaml carries the same top-level recipe schema" \
+  || bad "find-skills.yaml missing recipe keys:$SCHEMA_MISSING"
+grep -qE '^title: find-skills$' "$FS_RECIPE" \
+  && ok "find-skills.yaml declares title: find-skills" \
+  || bad "find-skills.yaml title must be find-skills"
+
+# The two runtime-independent CLI facts. Getting either wrong ships guidance
+# that 404s (pull by `name`) or that gives up too early (`--search` is a
+# substring match, so a name search can miss a skill that exists).
+grep -q "catalog_id" "$FS_RECIPE" \
+  && ok "find-skills documents pull-by-catalog_id (not the JSON name)" \
+  || bad "find-skills must document pull-by-catalog_id"
+grep -qi "substring" "$FS_RECIPE" \
+  && ok "find-skills documents --search as a substring match" \
+  || bad "find-skills must document --search substring semantics"
+
+# Degrade-silently contract: the CLI is never a prerequisite.
+grep -q "command -v rockie" "$FS_RECIPE" \
+  && ok "find-skills guards on a missing CLI before calling it" \
+  || bad "find-skills must guard with command -v rockie"
+grep -q "127" "$FS_RECIPE" && grep -q "rockie auth login" "$FS_RECIPE" \
+  && ok "find-skills documents not-installed (127) + not-authenticated (2)" \
+  || bad "find-skills must document exit 127 and exit 2"
+
+# Nugget-specific correctness: Goose has NO SKILL.md discovery, so a pulled
+# skill is reference material you read_file — never an invocable command. This
+# is the delta from the Claude/Codex ports and the easiest thing to get wrong.
+if grep -qE '(^|[^a-z])[/$](find-skills|grpo-rl-training|serving-llms-vllm)' "$FS_RECIPE"; then
+  bad "find-skills implies slash/dollar invocation — Goose has no skill discovery"
+else
+  ok "find-skills never implies invocable skills (Goose reads markdown)"
+fi
+grep -q "read_file" "$FS_RECIPE" \
+  && ok "find-skills reads the pulled SKILL.md via read_file" \
+  || bad "find-skills must read the pulled skill via read_file"
+
+# read_file/write_file are sandboxed to the workspace (_safe_path rejects
+# escapes), so a pull must land on a workspace-relative path or be unreadable.
+grep -q -- "--out \./skills/" "$FS_RECIPE" \
+  && ok "find-skills pulls into the workspace (read_file sandbox)" \
+  || bad "find-skills must pull to a workspace-relative path"
+
+grep -q "find-skills" "$REPO/README.md" \
+  && ok "README points at the find-skills recipe" \
+  || bad "README missing the find-skills recipe"
+
 # On a non-Linux host the platform gate fires by design; assert that and stop.
 if [ "$(uname -s)" != "Linux" ]; then
   if bash "$REPO/install.sh" >/dev/null 2>&1; then
@@ -106,6 +168,8 @@ grep -q "rockie-nugget overlay (managed" "$HINTS" && ok ".goosehints uses a mana
 have "$RECIPES/autoresearch.yaml"  "recipe: autoresearch.yaml installed"
 have "$RECIPES/experiment.yaml"    "recipe: experiment.yaml installed"
 have "$RECIPES/clean.yaml"         "recipe: clean.yaml installed"
+have "$RECIPES/find-skills.yaml"   "recipe: find-skills.yaml installed"
+grep -q "find-skills.yaml" "$HINTS" && ok ".goosehints advertises the find-skills recipe" || bad ".goosehints missing the find-skills recipe"
 have "$PLUGIN/hooks/hooks.json"    "capture hook plugin registered (Open-Plugins manifest at hooks/hooks.json)"
 have "$PLUGIN/hooks/capture.sh"    "capture hook script installed"
 [ -x "$PLUGIN/hooks/capture.sh" ] && ok "capture hook is executable" || bad "capture hook not executable"

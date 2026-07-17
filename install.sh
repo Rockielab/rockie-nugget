@@ -286,6 +286,25 @@ case ":$PATH:" in
      say "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc && source ~/.bashrc" ;;
 esac
 
+# ── skill-catalog on-ramp ───────────────────────────────────────────────────
+# The catalog is the point: ~300 skills stay OUT of the agent's context and get
+# pulled on demand. Say so at the one moment we know someone is reading this
+# terminal. Non-blocking, once per install, both branches.
+say ""
+if command -v rockie >/dev/null 2>&1; then
+  say "  skill catalog: the rockie CLI is on PATH — the agent can pull from ~300"
+  say "  platform skills on demand (they stay out of context until needed):"
+  say "    rockie skill catalog --search grpo --json"
+  say "    rockie skill pull grpo-rl-training --out ./skills/grpo-rl-training"
+  say "  Drives that loop: goose run --recipe find-skills.yaml --params topic=grpo"
+else
+  say "  optional: the rockie CLI lets the agent pull from ~300 platform skills"
+  say "  (ML training/inference, biology, chemistry, physics, databases, coding)"
+  say "  on demand instead of carrying them all in context:"
+  say "    curl -fsSL https://rockielab.com/install.sh | sh && rockie auth login"
+  say "  Everything above works without it — nugget never requires it."
+fi
+
 say ""
 say "✓ rockie-nugget install complete."
 say ""

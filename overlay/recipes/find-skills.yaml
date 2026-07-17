@@ -1,0 +1,126 @@
+version: "1.0.0"
+title: find-skills
+description: >-
+  Mine the Rockie skill catalog (~300 expert skills) for the one that matches the
+  work in front of you: browse with the rockie CLI, pull the SKILL.md into the
+  workspace, read it, apply it. The catalog is deliberately NOT in context — you
+  pull what you need. Model-agnostic; degrades silently when the CLI is absent or
+  logged out (it is never a prerequisite).
+
+parameters:
+  - key: topic
+    input_type: string
+    requirement: required
+    description: >-
+      What you need expertise in — a framework, library, or domain (e.g. "grpo",
+      "vllm", "alphafold", "duckdb"). Matched as a substring, so prefer a
+      distinctive term.
+  - key: category
+    input_type: string
+    requirement: optional
+    default: ""
+    description: >-
+      Optional catalog category to sweep instead of searching, e.g. "ml-training",
+      "ml-inference", "biology", "chemistry", "physics", "databases", "coding".
+      Derive the live list from --json rather than trusting this list.
+
+instructions: |
+  Find and apply expert guidance from the Rockie skill catalog for "{{ topic }}".
+  Use research-env-v1 tools only: `run_command` to drive the CLI, `read_file` to
+  read what you pulled.
+
+  ## 0. Degrade silently — the CLI is optional
+
+  FIRST, check the CLI exists. If it does not, say ONE line ("no rockie CLI —
+  proceeding without the catalog") and do the task directly. Never block, never
+  retry in a loop, never nag:
+
+      run_command: command -v rockie >/dev/null 2>&1 && echo HAVE || echo MISSING
+
+  Exit codes you will actually hit:
+    0   worked
+    1   no such skill (pull) — re-check the id
+    2   not authenticated — say `rockie auth login` ONCE, then carry on without it
+    127 not installed, or tenant unreachable — say nothing, carry on
+
+  A user without the CLI is not a broken user. The catalog is a shortcut, not a
+  dependency.
+
+  ## 1. Browse
+
+      run_command: rockie skill catalog --search {{ topic }} --json
+      # or, if category is set:
+      run_command: rockie skill catalog --category {{ category }} --json
+
+  Always `--json`. The tab-delimited form omits a field you need. Shape:
+
+      {"skills": [{"name": "verl-rl-training", "catalog_id": "verl",
+                   "description": "...", "category": "ml-training"}],
+       "catalog_revision": "...", "tenant_visible_count": 296}
+
+  TWO IDENTIFIERS, both matter — they differ for 39 of 297 entries (~13%):
+    - `catalog_id` → what you PULL by (`rockie skill pull <catalog_id>`)
+    - `name`       → the skill's own frontmatter name
+
+  Verified: `rockie skill pull serving-llms-vllm` returns 404/exit 1, while
+  `rockie skill pull vllm` works — its frontmatter `name` is serving-llms-vllm.
+  Pull by `catalog_id`. Never guess one identifier from the other.
+
+  `--search` is a SUBSTRING match, not a search engine. It is noisy and misses
+  exact names — `--search verl` returns geopandas, whose description contains
+  "o*verl*ay operations". So: don't trust the top hit, and don't conclude a skill
+  is absent because a name search missed it. Prefer `--category` for a clean
+  sweep. No hits is success with an empty list (`{"skills":[]}`, exit 0), not an
+  error.
+
+  If the catalog search comes up empty but you believe the skill exists, check
+  the tenant overlay — a separate namespace that `pull` also resolves against:
+
+      run_command: rockie skill list --json
+
+  ## 2. Evaluate before pulling
+
+  Read the `description` fields. Pick the ONE or TWO that actually match
+  "{{ topic }}". Do not pull a whole category. Every pulled file is bytes you
+  will read into context later — pull what the work needs, nothing else.
+
+  ## 3. Pull INTO THE WORKSPACE
+
+  `read_file` is sandboxed to the workspace: a path that escapes it is refused.
+  `run_command` already runs with the workspace as its cwd, so pull to a
+  workspace-relative path or you will not be able to read what you pulled:
+
+      run_command: rockie skill pull <catalog_id> --out ./skills/<catalog_id>
+
+  Verified shape (grpo-rl-training, 4 files):
+
+      skills/grpo-rl-training/
+        SKILL.md
+        README.md
+        examples/reward_functions_library.py
+        templates/basic_grpo_training.py
+
+  ## 4. Read it and apply it
+
+      read_file: skills/<catalog_id>/SKILL.md
+
+  IMPORTANT — nugget is not Claude Code. Goose has no SKILL.md discovery: a
+  pulled skill is **reference material you read**, not a command you can invoke.
+  There is no `/name` or `$name` here. Read the SKILL.md, then read the bundled
+  `examples/` and `templates/` — they are real runnable files, which is most of
+  the value. Follow its guidance the way you would follow a good README.
+
+  If a pulled skill turns out to be a poor match, `rm -rf ./skills/<catalog_id>`
+  and move on rather than forcing it.
+
+  ## 5. Report
+
+  Say which skill you pulled (its `catalog_id`), why it matched, and the one or
+  two concrete things it changed about your plan. If nothing matched, say so
+  plainly and proceed on your own — a miss is a normal outcome, not a failure.
+
+prompt: |
+  Find expert guidance for "{{ topic }}" in the Rockie skill catalog: check the
+  CLI is present, browse with --json, pull the best match by catalog_id into
+  ./skills/, read it, and report what it changed about your approach. If the CLI
+  is missing or logged out, say so in one line and proceed without it.

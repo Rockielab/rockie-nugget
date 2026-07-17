@@ -26,7 +26,11 @@ loop **deliberately thin** and puts the leverage where it lasts:
   servers. The agent's whole capability set is a declarative, versioned tool contract —
   see [`contract/`](./contract/research-env-v1/).
 - **Skills are just markdown.** The Rockie skills ecosystem is plain `.md` files — read
-  them, fork them, write your own. No DSL, no lock-in.
+  them, fork them, write your own. No DSL, no lock-in. ~300 of them sit behind the
+  `rockie` CLI, deliberately *out* of the agent's context until it pulls one:
+  `rockie skill catalog --search grpo --json`, then `rockie skill pull grpo-rl-training
+  --out ./skills/grpo-rl-training`, then read it. The `find-skills.yaml` recipe drives
+  that loop; the CLI is optional and nugget works fine without it.
 - **Built to be an evaluation *and* training environment.** The same harness that serves a
   task can measure how good a model is at research, and (privately, on our side) train one.
 
@@ -100,8 +104,9 @@ reason like *Rockie*. It is config-only — the same files the local installer c
 - **`overlay/recipes/`** — composable task templates: `autoresearch.yaml` (frozen-metric
   loop, plus a `campaign_mode=sustained` layer for multi-day operation — concurrent
   run/plan/write-up staffing, a verdict protocol, and a novelty re-verification gate),
-  `experiment.yaml` (pre-experiment gate → `submit_job` → poll → report), and
-  `clean.yaml` (anti-slop pre-commit pass). Run one with `goose run --recipe <file>`.
+  `experiment.yaml` (pre-experiment gate → `submit_job` → poll → report),
+  `clean.yaml` (anti-slop pre-commit pass), and `find-skills.yaml` (mine the ~300-skill
+  Rockie catalog for the task in front of you). Run one with `goose run --recipe <file>`.
 - **`overlay/memory/` + the builtin memory extension** — durable cross-session memory.
   The agent emits `[LEARN]` / `[DEAD-END]` blocks; a `Stop` hook
   ([`overlay/hooks/capture.sh`](./overlay/hooks/)) appends them to plain-text memory the next

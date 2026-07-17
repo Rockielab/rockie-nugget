@@ -27,7 +27,7 @@ see Recipes below) encodes the loop that enforces these; both travel with
 the install.
 
 - **One spearhead.** Pick the single result the campaign is actually for —
-  the flagship experiment — and treat everything else as support or queue
+  the flagship experiment — and treat everything else as support or backlog
   filler. A campaign with two co-equal priorities makes neither one land.
 - **Concurrent pipeline.** Past a single experiment, never run sequentially:
   RUN the live experiment; PLAN the next one with every WIN/PARTIAL/NULL
@@ -36,7 +36,7 @@ the install.
   explicit pending slot for the current one. Zero idle gap between a verdict
   landing and the next launch.
 - **Utilization, not occupancy.** If you're paying for compute — a
-  spot-rented instance or a fixed uptime-metered box — idle time is wasted
+  spot-rented instance or a reserved box on a fixed compute window — idle time is wasted
   money either way. Sample utilization periodically; sustained low
   utilization on hardware you're actively paying for is a bug to diagnose,
   not background noise. Saturation-packing (predicting utilization and

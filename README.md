@@ -98,7 +98,9 @@ reason like *Rockie*. It is config-only — the same files the local installer c
   The installer merges it into `~/.config/goose/.goosehints` under a managed sentinel block,
   so your own hints are never clobbered.
 - **`overlay/recipes/`** — composable task templates: `autoresearch.yaml` (frozen-metric
-  loop), `experiment.yaml` (pre-experiment gate → `submit_job` → poll → report), and
+  loop, plus a `campaign_mode=sustained` layer for multi-day operation — concurrent
+  run/plan/write-up staffing, a verdict protocol, and a novelty re-verification gate),
+  `experiment.yaml` (pre-experiment gate → `submit_job` → poll → report), and
   `clean.yaml` (anti-slop pre-commit pass). Run one with `goose run --recipe <file>`.
 - **`overlay/memory/` + the builtin memory extension** — durable cross-session memory.
   The agent emits `[LEARN]` / `[DEAD-END]` blocks; a `Stop` hook

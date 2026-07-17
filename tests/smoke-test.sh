@@ -117,6 +117,7 @@ fi
 
 # ── run 1: full install ──────────────────────────────────────────────────────
 echo ""; echo "${YELLOW}── install (run 1) ──${RESET}"
+INSTALL_LOG="$WORK/install-run1.log"
 if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
   # The release workflow prepares the raw binary before the Rockie release
   # asset exists. Pre-place that exact executable so install.sh exercises its
@@ -130,8 +131,13 @@ if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
       install -m 0755 "$NUGGET_SMOKE_PREBUILT_GOOSE" "$BIN/goose"
     fi
   fi
-  bash "$REPO/install.sh" >/dev/null 2>&1; INSTALL_EC=$?
-  [ "$INSTALL_EC" -eq 0 ] && ok "install.sh exits 0 on a clean run" || bad "install.sh exited non-zero ($INSTALL_EC)"
+  bash "$REPO/install.sh" >"$INSTALL_LOG" 2>&1; INSTALL_EC=$?
+  if [ "$INSTALL_EC" -eq 0 ]; then
+    ok "install.sh exits 0 on a clean run"
+  else
+    bad "install.sh exited non-zero ($INSTALL_EC)"
+    sed 's/^/  | /' "$INSTALL_LOG"
+  fi
   have "$BIN/goose"  "goose runtime binary installed"
   [ -x "$BIN/goose" ] && ok "goose binary is executable" || bad "goose binary not executable"
 else
@@ -142,10 +148,14 @@ else
   # we instead invoke only the config/launcher writers via a guarded run.
   # Capture the exit code explicitly — a swallowed non-zero here is exactly how
   # the launcher-heredoc `MCP_DIR: unbound variable` regression hid from CI.
-  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1; INSTALL_EC=$?
-  [ "$INSTALL_EC" -eq 0 ] && ok "install.sh exits 0 on a clean run" || bad "install.sh exited non-zero ($INSTALL_EC)"
+  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >"$INSTALL_LOG" 2>&1; INSTALL_EC=$?
+  if [ "$INSTALL_EC" -eq 0 ]; then
+    ok "install.sh exits 0 on a clean run"
+  else
+    bad "install.sh exited non-zero ($INSTALL_EC)"
+    sed 's/^/  | /' "$INSTALL_LOG"
+  fi
 fi
-
 have "$CONFIG"        "Goose config written"
 have "$BIN/nugget"    "nugget launcher installed"
 [ -x "$BIN/nugget" ] && ok "nugget launcher is executable" || bad "nugget launcher not executable"
@@ -154,6 +164,9 @@ have "$BIN/nugget"    "nugget launcher installed"
 # break and (paired with the run-2 exit-0 assertion) the install-time-unbound
 # regression that wrote a broken launcher.
 [ -e "$BIN/nugget" ] && bash -n "$BIN/nugget" 2>/dev/null && ok "generated nugget launcher parses (bash -n)" || bad "generated nugget launcher fails bash -n"
+grep -Fq '# `goose session export` the turn to persist [LEARN]/[DEAD-END] memory.' "$BIN/nugget" \
+  && ok "launcher heredoc preserves literal command text" \
+  || bad "launcher heredoc expanded command text while installing"
 
 grep -q "research-env-v1:" "$CONFIG"            && ok "config registers research-env-v1 extension"    || bad "extension not in config"
 grep -q "enabled: true"    "$CONFIG"            && ok "extension has enabled: true (required by Goose)" || bad "missing enabled: true"
@@ -211,10 +224,17 @@ fi
 # ── run 2: idempotency ───────────────────────────────────────────────────────
 echo ""; echo "${YELLOW}── idempotency (run 2) ──${RESET}"
 CFG_BEFORE="$(cat "$CONFIG")"
+INSTALL_LOG_RUN2="$WORK/install-run2.log"
 if [ "${NUGGET_SMOKE_FETCH:-0}" = "1" ]; then
-  bash "$REPO/install.sh" >/dev/null 2>&1 || bad "second install.sh run exited non-zero"
+  bash "$REPO/install.sh" >"$INSTALL_LOG_RUN2" 2>&1; INSTALL_EC=$?
 else
-  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >/dev/null 2>&1 || bad "second install.sh run exited non-zero"
+  NUGGET_SKIP_BINARY=1 bash "$REPO/install.sh" >"$INSTALL_LOG_RUN2" 2>&1; INSTALL_EC=$?
+fi
+if [ "$INSTALL_EC" -eq 0 ]; then
+  ok "second install.sh run exits 0"
+else
+  bad "second install.sh run exited non-zero ($INSTALL_EC)"
+  sed 's/^/  | /' "$INSTALL_LOG_RUN2"
 fi
 [ "$(cat "$CONFIG")" = "$CFG_BEFORE" ] && ok "config unchanged on re-run (idempotent)" || bad "config drifted on re-run"
 [ "$(grep -c 'research-env-v1:' "$CONFIG")" = "1" ] && ok "no duplicate extension block on re-run" || bad "duplicate extension block"

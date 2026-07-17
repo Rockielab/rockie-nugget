@@ -4,7 +4,10 @@ description: >-
   The canonical around-the-clock Rockie research loop. Pick a target, declare an
   explicit mutation surface, lock a frozen metric, run one iteration under a hard
   time budget, score against the frozen metric, codify a [LEARN]/[DEAD-END], and
-  propose the next iteration. Model-agnostic; uses only research-env-v1 tools.
+  propose the next iteration. Also carries a sustained-campaign operating layer
+  (concurrent run/plan/write-up staffing, a verdict protocol, a pre-launch
+  resource/placement red-team, and a novelty re-verification gate) for multi-day
+  operation via campaign_mode. Model-agnostic; uses only research-env-v1 tools.
 
 parameters:
   - key: goal
@@ -28,6 +31,36 @@ parameters:
     requirement: optional
     default: "300"
     description: Hard wall-clock cap for the single iteration.
+  - key: campaign_mode
+    input_type: string
+    requirement: optional
+    default: "single"
+    description: >-
+      "single" runs one self-contained iteration (steps 1-9 below). "sustained"
+      additionally applies the multi-day campaign operating layer described
+      after step 9 — concurrent pipeline staffing, the verdict protocol, the
+      pre-launch resource/placement red-team, and the novelty re-verification
+      gate. Switch to "sustained" once more than one experiment is in flight
+      across more than a day of wall-clock; a single short experiment doesn't
+      need it.
+  - key: pipeline_role
+    input_type: string
+    requirement: optional
+    default: "run"
+    description: >-
+      Only used when campaign_mode="sustained". Which pipeline role THIS
+      invocation is staffing: "run" (the live experiment), "plan" (design the
+      next one), or "write_up" (write up the previous result). Launch one
+      invocation per role concurrently — never sequentially.
+  - key: compute_hours
+    input_type: string
+    requirement: optional
+    default: "0"
+    description: >-
+      Only used when campaign_mode="sustained". Estimated compute this
+      iteration commits, in device-hours (hardware-agnostic — GPU, CPU, or
+      otherwise). Sets the ceremony tier for the pre-launch resource/placement
+      red-team below.
 
 instructions: |
   Run ONE iteration of the Rockie autoresearch loop. Follow it in order and do
@@ -49,7 +82,77 @@ instructions: |
      if you proved the direction is dead. Then propose the next iteration's
      hypothesis + mutation surface in one line.
 
+  Steps 1-9 above are the complete loop for campaign_mode="single". Everything
+  below applies ONLY when campaign_mode="sustained".
+
+  CONCURRENT PIPELINE STAFFING. Never run a sustained campaign sequentially.
+  Staff three roles at once, each its own invocation of this recipe with
+  pipeline_role set accordingly:
+    - run — the live experiment executing right now (steps 1-9 above). Poll it
+      BLIND: report structure only (crashed? how many cells finished? error
+      greps) — never metric values — until the verdict step below runs.
+    - plan — draft the next iteration with every WIN/PARTIAL/NULL branch of
+      the current run pre-specified AND pre-attacked, so the winning branch
+      can launch the same day the current verdict is recorded. Zero idle gap
+      between a verdict landing and the next launch.
+    - write_up — write up the previous result, carrying an explicit pending
+      slot for the current run's verdict.
+
+  VERDICT PROTOCOL (never shortcut this).
+    1. Runs are BLIND, per above.
+    2. On completion, dispatch a FRESH invocation with no narrative memory of
+       the run (a new session, not a continuation) to apply the bands that
+       were frozen BEFORE the run started to the raw artifacts.
+    3. RECORD FIRST: write_file the verdict into the experiment/design record
+       before treating any dependent stage as unblocked and before surfacing
+       it to the operator.
+    4. Cross-check the recorded verdict against the raw files yourself. If two
+       assessments make conflicting claims about the same artifact, read the
+       raw artifact directly and record the tiebreak — never average, split
+       the difference, or default to the more recent claim.
+    5. Surface the verdict first, with honest odds, no spin. Never fabricate
+       dates or results.
+
+  PRE-LAUNCH RESOURCE/PLACEMENT RED-TEAM. Before any run that commits real
+  compute, check: does the workload actually fit the target hardware
+  (predicted utilization + memory, not a guess)? Is the timeout realistic at
+  the measured rate? Is this a duplicate of a run already in flight? Is there
+  an undischarged gate blocking this launch? Ceremony scales with
+  compute_hours, not with excitement:
+    - compute_hours < 10: one audit pass.
+    - 10 <= compute_hours <= 50: audit plus a dedicated resource/placement
+      red-team pass.
+    - compute_hours > 50, or anything publication-bound: full multi-round
+      adversarial gauntlet.
+
+  NOVELTY RE-VERIFICATION GATE. A novelty check done once at design time goes
+  stale the moment the claim moves. Re-run it BEFORE every launch and at every
+  CLAIM PIVOT — a reframed headline is a NEW claim even when the experiment
+  underneath is unchanged, because the literature it now competes in has
+  changed. Triple-sworn, using web_search/fetch_url:
+    1. External sweep, by-TASK angle: who has run this task family/protocol,
+       in what train-test regime?
+    2. External sweep, by-MECHANISM angle (a separate pass, not the same
+       search reused): who has built this mechanism or claimed this property?
+       Hunt specifically for anything published since the last check.
+    3. Internal-archive sweep (read_file/list_files, read-only): does your own
+       experiment log, dead-end memory, and design history already contain,
+       constrain, or contradict the planned run or claim?
+  Prompt both external sweeps ADVERSARIALLY ("find the scoop") and require a
+  kill-question verdict plus the narrowest honest unclaimed statement from
+  each. For any publication-bound claim, a judge-tier invocation (see Model
+  tiering below) adjudicates all three sweeps, records the verdict in the
+  relevant design doc, and only then treats the dependent stage as unblocked.
+
+  MODEL TIERING ACROSS INVOCATIONS. run and plan invocations may use a
+  cheaper/faster BYOK model. The verdict-assessment invocation (step 2 of the
+  verdict protocol) and any novelty-gate judge invocation should use the
+  strongest available BYOK model — they're the check on everything else, so
+  under-provisioning them defeats the point.
+
 prompt: |
   Goal: {{ goal }}
-  Run one autoresearch iteration now, then finish with the score and the
-  proposed next iteration.
+  campaign_mode: {{ campaign_mode }} (pipeline_role: {{ pipeline_role }}, compute_hours: {{ compute_hours }})
+  Run one autoresearch iteration now — applying the sustained-campaign
+  operating layer if campaign_mode is "sustained" — then finish with the score
+  and the proposed next iteration.

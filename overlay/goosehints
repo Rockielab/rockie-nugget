@@ -20,6 +20,52 @@ Every cycle should make the next cycle better.
 - **Codify.** Record what you learned (see Memory below) so the next session
   starts smarter.
 
+## Operating Doctrine (for sustained, multi-day campaigns)
+
+The `autoresearch` recipe (`autoresearch.yaml`, in the Goose recipe dir —
+see Recipes below) encodes the loop that enforces these; both travel with
+the install.
+
+- **One spearhead.** Pick the single result the campaign is actually for —
+  the flagship experiment — and treat everything else as support or backlog
+  filler. A campaign with two co-equal priorities makes neither one land.
+- **Concurrent pipeline.** Past a single experiment, never run sequentially:
+  RUN the live experiment; PLAN the next one with every WIN/PARTIAL/NULL
+  branch pre-specified and pre-attacked so the winning branch launches the
+  same day the current verdict lands; WRITE UP the previous result with an
+  explicit pending slot for the current one. Zero idle gap between a verdict
+  landing and the next launch.
+- **Utilization, not occupancy.** If you're paying for compute — a
+  spot-rented instance or a reserved box on a fixed compute window — idle time is wasted
+  money either way. Sample utilization periodically; sustained low
+  utilization on hardware you're actively paying for is a bug to diagnose,
+  not background noise. Saturation-packing (predicting utilization and
+  memory per job, then packing several small jobs onto one device with a
+  contention-priced ceiling instead of running each alone) is a pre-launch
+  design decision, not an afterthought.
+- **Research grounding.** Every design, claim, and report cites VERIFIED
+  literature — confirm author, venue, and actual claim with `web_search`/
+  `fetch_url` before a citation enters any doc, and spot-check load-bearing
+  claims (fetch the abstract) before folding them in. Novelty is a searched
+  absence, never an assumed one.
+- **Novelty re-verification gate.** A novelty check done once at design time
+  goes stale the moment the claim moves. Re-run it before every launch AND at
+  every claim pivot — a reframed headline is a new claim even when the
+  experiment underneath is unchanged, because the literature it now competes
+  in has changed. See the `autoresearch` recipe's sustained-campaign section
+  for the full triple-sweep protocol (external by-task, external
+  by-mechanism, internal-archive).
+- **Ceremony tiers.** Ceremony scales with compute committed, not with
+  excitement: under 10 compute-hours gets one audit pass; 10-50 gets an audit
+  plus a dedicated resource/placement red-team pass; over 50 compute-hours,
+  or anything publication-bound, gets a full multi-round adversarial
+  gauntlet.
+- **Model tiering across invocations.** Worker-role invocations (research,
+  drafting, running) can use a cheaper/faster BYOK model. Judge-role
+  invocations (verdict assessment, attack rounds, blind review) should use
+  the strongest available model — they're the check on everything else, so
+  under-provisioning them defeats the point.
+
 ## Hard rules
 
 - Verify before claiming. Evidence or it didn't happen.
@@ -93,7 +139,10 @@ Composable task templates live under the Goose recipe dir
 
 - `autoresearch.yaml` — the around-the-clock loop: pick a target, declare an
   explicit mutation surface, lock a frozen metric, run under a time budget,
-  score, codify, repeat.
+  score, codify, repeat. Set `campaign_mode=sustained` for a multi-day
+  campaign to layer in concurrent run/plan/write-up staffing, the verdict
+  protocol, and the novelty re-verification gate (see Operating Doctrine
+  above).
 - `experiment.yaml` — pre-experiment gate → submit a compute job → poll →
   honest report.
 - `clean.yaml` — pre-commit anti-slop pass: cuts > adds, no new docs, fix only

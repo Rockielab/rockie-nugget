@@ -47,6 +47,17 @@ MCP over stdio: newline-delimited JSON-RPC 2.0 (one request/response object per 
 Implements `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`.
 Protocol version `2024-11-05`.
 
+## Container
+
+The repository-root `Dockerfile` packages this stdio server for container hosts such as
+Glama. It runs as a non-root user with the frozen contract at
+`/app/contract/research-env-v1` and an ephemeral writable workspace at `/workspace`.
+
+```bash
+docker build -t rockie-research-env .
+docker run --rm -i rockie-research-env
+```
+
 ## Register in Goose (config.yaml)
 
 Goose reads `~/.config/goose/config.yaml`. The `extensions:` map deserializes into

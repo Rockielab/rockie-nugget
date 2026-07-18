@@ -1,0 +1,10 @@
+**
+!.dockerignore
+!Dockerfile
+!contract/
+!contract/research-env-v1/
+!contract/research-env-v1/**
+!mcp/
+!mcp/research-env-mcp/
+!mcp/research-env-mcp/rockie_auth.py
+!mcp/research-env-mcp/server.py

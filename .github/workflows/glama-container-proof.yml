@@ -1,0 +1,58 @@
+name: glama-container-proof
+
+on:
+  pull_request:
+    paths:
+      - ".dockerignore"
+      - "Dockerfile"
+      - "contract/research-env-v1/**"
+      - "mcp/research-env-mcp/**"
+      - "tests/glama-container-smoke.py"
+      - ".github/workflows/glama-container-proof.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".dockerignore"
+      - "Dockerfile"
+      - "contract/research-env-v1/**"
+      - "mcp/research-env-mcp/**"
+      - "tests/glama-container-smoke.py"
+      - ".github/workflows/glama-container-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: glama-container-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  container-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      IMAGE_NAME: rockie-nugget-glama:ci
+
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run research environment unit tests
+        working-directory: mcp/research-env-mcp
+        run: python3 -m unittest test_run_command test_web_tools test_gpu_tools -v
+
+      - name: Build the Glama image
+        run: docker build --file Dockerfile --tag "$IMAGE_NAME" .
+
+      - name: Verify the default user is non-root
+        shell: bash
+        run: |
+          set -euo pipefail
+          uid="$(docker run --rm --entrypoint id "$IMAGE_NAME" -u)"
+          [[ "$uid" != "0" ]]
+
+      - name: Exercise MCP JSON-RPC over container stdio
+        run: >-
+          python3 tests/glama-container-smoke.py
+          docker run --rm --interactive "$IMAGE_NAME"
